@@ -1,5 +1,5 @@
 {
-  "name": "page-trail",
+  "name": "PageTrail",
   "version": "1.0.0",
   "description": "This Extension tracks your daily surfing activity",
   "permissions": [
@@ -15,7 +15,16 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "PageTrail Pro",
+    "default_icon": {
+      "16": "./icons/Icon-16.png",
+      "24": "./icons/Icon-24.png",
+      "32": "./icons/Icon-32.png",
+      "48": "./icons/Icon-48.png",
+      "64": "./icons/Icon-64.png",
+      "128": "./icons/Icon-128.png",
+      "196": "./icons/Icon-196.png"
+    },
+    "default_title": "PageTrail",
     "default_popup": "index.html"
   },
   "manifest_version": 3

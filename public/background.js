@@ -74,7 +74,7 @@ function updateTabTime(tabId) {
     chrome.tabs.get(tabId, function(tab) {
 
       console.log(tabId);
-      console.log(tag);
+      console.log(tab);
 
       if (chrome.runtime.lastError || !tab || !tab.url || urlIsExcluded(tab.url)) {
         console.error("Error retrieving tab: ", chrome.runtime.lastError);
