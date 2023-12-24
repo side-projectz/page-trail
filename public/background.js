@@ -1,5 +1,3 @@
-import { setDataInRedis } from '../utils/redis';
-
 let activeTab = null;
 let startTime = new Date().getTime();
 let isWindowFocused = true;
@@ -59,7 +57,16 @@ async function sendDataToServer() {
   try {
     const { pagesVisited } = await chrome.storage.local.get(['pagesVisited']);
     if (pagesVisited) {
-      await setDataInRedis(pagesVisited);
+      // await redisUtils.setDataInRedis(pagesVisited);
+
+        const response = await fetch(`chrome-extension://fendjdlgfcjdgpldnljodnbeagjfbfad/api/redis`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ pagesVisited }),
+        })
+
       console.log('Data sent successfully:', await response.json());
       await updateLastSyncTime();
     }

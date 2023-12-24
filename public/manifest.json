@@ -2,7 +2,7 @@
   "name": "PageTrail",
   "version": "1.0.0",
   "description": "This Extension tracks your daily surfing activity",
-  "permissions": ["storage", "webNavigation", "tabs", "alarms"],
+  "permissions": ["storage", "webNavigation", "tabs", "alarms", "identity"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
     "service_worker": "background.js"
@@ -19,5 +19,18 @@
     "default_title": "PageTrail",
     "default_popup": "index.html"
   },
-  "manifest_version": 3
+  "manifest_version": 3,
+  "content_security_policy": {
+    "sandbox": "sandbox allow-scripts; script-src 'self' 'https://apis.google.com/' 'https://www.gstatic.com/' 'https://*.firebaseio.com' 'https://www.googleapis.com' 'https://ajax.googleapis.com'; object-src 'self'"
+  },
+  "oauth2": {
+    "client_id": "547110318383-a8nbep3qu8ece0jfbhem4ufvads2lfd2.apps.googleusercontent.com",
+    "scopes": [
+      "profile",
+      "email",
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  }, 
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkLujhvQ3Pbvn38KSO3j/EQPH8wlQCyuNS3JtfMmk36M6d1ye2qvVh+or4yPa578y4vGs5FrzaLTo6RSN5bDfQ71yNTp4cgusx6mD/kn2nQhJ0yufeMIhJJbrR/mxvzeqJSTjEclu5fbtJk4uBMUHb0d7OgMRRQJKwDj52IeRSrk1q/BhlaBo4Ft8b4Aga+TBMgXMmGO1FoOVtpLyNHr365hhZXarrOaCYSin8K3/vyGR2B4uW1TDCXaFH1ar8eIKphm9ZAj38n/kw8n//XRwLDZdaV3gBhVtbiPCLlj7piq4eMd4bQyO+tL5zUhUDd4b6q94duvysDyiGyjTJfHTiQIDAQAB"
 }
