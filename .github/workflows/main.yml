@@ -26,12 +26,3 @@ jobs:
         client-id: ${{ secrets.CLIENT_ID }}
         client-secret: ${{ secrets.CLIENT_SECRET }}
         refresh-token: ${{ secrets.REFRESH_TOKEN }}
-
-    - name: Publish to Chrome Web Store
-      uses: Klemensas/action-chrome-extension-upload@v1
-      with:
-        extension-id: YOUR_EXTENSION_ID
-        client-id: ${{ secrets.CLIENT_ID }}
-        client-secret: ${{ secrets.CLIENT_SECRET }}
-        refresh-token: ${{ secrets.REFRESH_TOKEN }}
-        publish: true
