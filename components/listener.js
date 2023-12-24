@@ -22,50 +22,52 @@ const Listener = () => {
   const [sortedDomains, setSortedDomains] = useState([]);
 
   useEffect(() => {
+    const loadData = () => {
+      chrome.storage.local.get('pagesVisited', function (result) {
+        const pagesVisited = result.pagesVisited || [];
+        let domainTimeMap = {};
+
+        // Aggregate time by domain
+        pagesVisited.forEach((domain) => {
+          domainTimeMap[domain.domainName] =
+            domainTimeMap[domain.domainName] || 0;
+          domain.pages.forEach((page) => {
+            domainTimeMap[domain.domainName] += page.timeSpent ?? 0;
+          });
+        });
+
+        console.log(domainTimeMap);
+
+        // Convert map to array for sorting
+        let sortedDomainsArray = Object.keys(domainTimeMap).map((domainName) => {
+          return { domainName, time: domainTimeMap[domainName] };
+        });
+
+        // Sorting based on the selected option
+        if (sortOption === 'topSpent') {
+          sortedDomainsArray.sort((a, b) => b.time - a.time);
+        } else if (sortOption === 'recentSpent') {
+          // For recentSpent, you need to have a lastVisited timestamp at domain level
+          // Assuming you have it, the sorting would be like:
+          // sortedDomainsArray.sort((a, b) => b.lastVisited - a.lastVisited);
+        }
+
+        setSortedDomains(sortedDomainsArray);
+      });
+    };
+
     loadData();
   }, [sortOption]);
 
-  const loadData = () => {
-    chrome.storage.local.get('pagesVisited', function (result) {
-
-      console.log(result)
-
-      const pagesVisited = result.pagesVisited || [];
-      let domainTimeMap = {};
-
-      // Aggregate time by domain
-      pagesVisited.forEach(domain => {
-        domainTimeMap[domain.domainName] = domainTimeMap[domain.domainName] || 0;
-        domain.pages.forEach(page => {
-          domainTimeMap[domain.domainName] += page.timeSpent ?? 0;
-        });
-      });
-
-      console.log(domainTimeMap);
-
-      // Convert map to array for sorting
-      let sortedDomainsArray = Object.keys(domainTimeMap).map(domainName => {
-        return { domainName, time: domainTimeMap[domainName] };
-      });
-
-      // Sorting based on the selected option
-      if (sortOption === 'topSpent') {
-        sortedDomainsArray.sort((a, b) => b.time - a.time);
-      } else if (sortOption === 'recentSpent') {
-        // For recentSpent, you need to have a lastVisited timestamp at domain level
-        // Assuming you have it, the sorting would be like:
-        // sortedDomainsArray.sort((a, b) => b.lastVisited - a.lastVisited);
-      }
-
-      setSortedDomains(sortedDomainsArray);
-    });
-  }
 
   return (
     <>
       <Head>
         <title>Domain Time Tracker</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+        <link
+          href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css'
+          rel='stylesheet'
+        />
         <style>{`
           body {
             width: 400px;
@@ -77,18 +79,21 @@ const Listener = () => {
       <div>
         <h1>Domain Time Tracker</h1>
 
-        <label htmlFor="sortOptions">Sort by:</label>
-        <select id="sortOptions" onChange={(e) => setSortOption(e.target.value)}>
-          <option value="topSpent">Top Spent</option>
-          <option value="recentSpent">Recent Spent</option>
+        <label htmlFor='sortOptions'>Sort by:</label>
+        <select
+          id='sortOptions'
+          onChange={(e) => setSortOption(e.target.value)}
+        >
+          <option value='topSpent'>Top Spent</option>
+          <option value='recentSpent'>Recent Spent</option>
         </select>
 
-        <div className="table-responsive">
-          <table className="table" id="domainList">
+        <div className='table-responsive'>
+          <table className='table' id='domainList'>
             <thead>
               <tr>
-                <th scope="col">Domain Name</th>
-                <th scope="col">Time Spent (hh:mm:ss)</th>
+                <th scope='col'>Domain Name</th>
+                <th scope='col'>Time Spent (hh:mm:ss)</th>
               </tr>
             </thead>
             <tbody>

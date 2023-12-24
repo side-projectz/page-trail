@@ -4,3 +4,4 @@
 /.env
 /dist
 /.vscode
+/utils/constants.js

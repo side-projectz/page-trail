@@ -4,23 +4,31 @@
   "description": "This Extension tracks your daily surfing activity",
   "main": "index.js",
   "scripts": {
-    "build": "npm run prep",
+    "build": "npm run lint && npm run prep",
     "prep": "npm run exp && node out.js",
     "exp": "next build",
     "start": "next start",
-    "dev": "next dev"
+    "dev": "next dev",
+    "lint": "next lint",
+    "format": "prettier --check --ignore-path .gitignore .",
+    "format:fix": "prettier --write --ignore-path .gitignore ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "eslint-config-next": "^14.0.4",
     "glob": "^10.2.3",
+    "ioredis": "^5.3.2",
     "next": "^14.0.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.254"
+    "@types/chrome": "^0.0.254",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "^14.0.4",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.3.3"
   }
 }
