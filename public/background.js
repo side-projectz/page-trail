@@ -23,8 +23,8 @@ function getMainDomain(url) {
     const parts = hostname.split('.').reverse();
     let mainDomain =
       parts.length > 2 &&
-      (parts[1].length === 2 ||
-        ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
+        (parts[1].length === 2 ||
+          ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
         ? parts[2] + '.' + parts[1] + '.' + parts[0]
         : parts[1] + '.' + parts[0];
 
@@ -59,16 +59,16 @@ async function sendDataToServer() {
     if (pagesVisited) {
       // await redisUtils.setDataInRedis(pagesVisited);
 
-        const response = await fetch(`chrome-extension://fendjdlgfcjdgpldnljodnbeagjfbfad/api/redis`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ pagesVisited }),
-        })
+      // const response = await fetch(`chrome-extension://lalpgpioopjnjbapmmmnjckppogncaog/api/redis`, {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({ pagesVisited }),
+      // })
 
-      console.log('Data sent successfully:', await response.json());
-      await updateLastSyncTime();
+      // console.log('Data sent successfully:', await response.json());
+      // await updateLastSyncTime();
     }
   } catch (error) {
     console.error('Error sending data:', error);
@@ -86,7 +86,25 @@ async function updateTabTime(tabId, isTabClosing = false) {
       const domainData = getMainDomain(tab.url);
       if (!domainData) return;
 
-      const { pagesVisited } = await chrome.storage.local.get(['pagesVisited']);
+      let pagesVisited = (await chrome.storage.local.get(['pagesVisited'])).pagesVisited;
+
+      if (typeof pagesVisited === 'undefined') {
+        await chrome.storage.local.set({ pagesVisited: [] });
+        pagesVisited = [];
+      }
+
+      // if (pagesVisited.length > 0) {
+      //   const response = await (await fetch(`chrome-extension://lalpgpioopjnjbapmmmnjckppogncaog/api/redis`, {
+      //     method: 'GET',
+      //     headers: {
+      //       'Content-Type': 'application/json',
+      //     },
+      //   })).json();
+
+      //   if (response) {
+      //     pagesVisited.push(...response.pagesVisited);
+      //   }
+      // }
       let domainIndex = pagesVisited.findIndex(
         (item) => item.domainName === domainData.mainDomain
       );
@@ -197,14 +215,47 @@ async function initializeTracking() {
   });
 }
 
+async function checkAuthentication() {
+  try {
+    const { token, grantedScopes } = await chrome.identity.getAuthToken({ interactive: true });
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError);
+      return null;
+    }
+
+    const response = await fetch(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`);
+    const userInfo = await response.json();
+
+    const { user_email } = await chrome.storage.sync.get('user_email');
+    if (user_email !== userInfo.email) {
+      await chrome.storage.sync.set({ user_email: userInfo.email });
+      // Initialize tracking if user_email has changed
+      initializeTracking();
+    }
+
+    return userInfo;
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return null;
+  }
+}
+
+
 (async () => {
-  const { user_email } = await chrome.storage.sync.get('user_email');
-  if (user_email) {
+  const userInfo = await checkAuthentication();
+  if (userInfo) {
     // Start tracking actions
     initializeTracking();
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'checkAuth') {
+      checkAuthentication().then((userInfo) => {
+        sendResponse({ isAuthenticated: userInfo });
+      });
+      return true;
+    }
+
     if (message.action === 'start_tracking') {
       initializeTracking();
     }
