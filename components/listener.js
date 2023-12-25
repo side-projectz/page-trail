@@ -39,9 +39,11 @@ const Listener = () => {
         console.log(domainTimeMap);
 
         // Convert map to array for sorting
-        let sortedDomainsArray = Object.keys(domainTimeMap).map((domainName) => {
-          return { domainName, time: domainTimeMap[domainName] };
-        });
+        let sortedDomainsArray = Object.keys(domainTimeMap).map(
+          (domainName) => {
+            return { domainName, time: domainTimeMap[domainName] };
+          }
+        );
 
         // Sorting based on the selected option
         if (sortOption === 'topSpent') {
@@ -58,7 +60,6 @@ const Listener = () => {
 
     loadData();
   }, [sortOption]);
-
 
   return (
     <>
@@ -97,12 +98,15 @@ const Listener = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedDomains.map((domain, index) => index < 5 && (
-                <tr key={index}>
-                  <td>{domain.domainName}</td>
-                  <td>{formatTime(domain.time)}</td>
-                </tr>
-              ))}
+              {sortedDomains.map(
+                (domain, index) =>
+                  index < 5 && (
+                    <tr key={index}>
+                      <td>{domain.domainName}</td>
+                      <td>{formatTime(domain.time)}</td>
+                    </tr>
+                  )
+              )}
             </tbody>
           </table>
         </div>

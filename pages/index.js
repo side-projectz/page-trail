@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { useEffect, useState } from 'react';
 import Listener from '../components/listener';
@@ -8,12 +8,10 @@ export default function Home() {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState('loading');
 
-
   useEffect(() => {
-
     const checkAuth = () => {
       setStatus('checking auth');
-      setStatus(user ? 'user already set' : 'user not set')
+      setStatus(user ? 'user already set' : 'user not set');
 
       if (user) {
         setStatus('user already set');
@@ -23,7 +21,9 @@ export default function Home() {
       chrome.runtime.sendMessage({ action: 'checkAuth' }, async (response) => {
         setStatus('check auth response');
 
-        setStatus(response.isAuthenticated ? 'authenticated' : 'not authenticated');
+        setStatus(
+          response.isAuthenticated ? 'authenticated' : 'not authenticated'
+        );
         if (response.isAuthenticated) {
           const user = await chrome.storage.sync.get('user_email');
           setUser(user.user_email);
@@ -35,7 +35,7 @@ export default function Home() {
           setStatus('not authenticated');
         }
       });
-    }
+    };
 
     if (window && document && typeof chrome !== 'undefined' && chrome.storage) {
       checkAuth();
@@ -45,7 +45,8 @@ export default function Home() {
   if (!user) {
     return (
       <>
-        Signing in please wait<br />
+        Signing in please wait
+        <br />
         {status}
       </>
     );

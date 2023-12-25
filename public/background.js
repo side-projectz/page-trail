@@ -1,6 +1,5 @@
 let activeTab = null;
-let startTime = new Date().getTime();
-let isWindowFocused = true;
+let tabDetails = {};
 
 const exclusionRules = {
   urlPatterns: ['chrome://', 'about:'],
@@ -16,6 +15,13 @@ function urlIsExcluded(url) {
   );
 }
 
+function storeTabDetails(tabId, url) {
+  tabDetails[tabId] = {
+    url: url,
+    startTime: new Date().getTime(),
+  };
+}
+
 function getMainDomain(url) {
   try {
     const parsedUrl = new URL(url);
@@ -23,8 +29,8 @@ function getMainDomain(url) {
     const parts = hostname.split('.').reverse();
     let mainDomain =
       parts.length > 2 &&
-        (parts[1].length === 2 ||
-          ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
+      (parts[1].length === 2 ||
+        ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
         ? parts[2] + '.' + parts[1] + '.' + parts[0]
         : parts[1] + '.' + parts[0];
 
@@ -58,7 +64,6 @@ async function sendDataToServer() {
     const { pagesVisited } = await chrome.storage.local.get(['pagesVisited']);
     if (pagesVisited) {
       // await redisUtils.setDataInRedis(pagesVisited);
-
       // const response = await fetch(`chrome-extension://lalpgpioopjnjbapmmmnjckppogncaog/api/redis`, {
       //   method: 'POST',
       //   headers: {
@@ -66,27 +71,30 @@ async function sendDataToServer() {
       //   },
       //   body: JSON.stringify({ pagesVisited }),
       // })
-
       // console.log('Data sent successfully:', await response.json());
       // await updateLastSyncTime();
     }
   } catch (error) {
-    console.error('Error sending data:', error);
+    console.log('[Error] sending data:', error);
   }
 }
 
 async function updateTabTime(tabId, isTabClosing = false) {
-  if (tabId !== null && (isWindowFocused || isTabClosing)) {
+  let tabInfo = tabDetails[tabId];
+
+  if (tabId !== null && (isWindowFocused || isTabClosing) && tabInfo) {
     let currentTime = new Date().getTime();
-    let duration = currentTime - startTime;
+    let duration = currentTime - tabInfo.startTime;
     try {
-      const tab = await chrome.tabs.get(tabId);
+      // const tab = await chrome.tabs.get(tabId);
+      const tab = tabInfo;
       if (!tab || !tab.url || urlIsExcluded(tab.url)) return;
 
       const domainData = getMainDomain(tab.url);
       if (!domainData) return;
 
-      let pagesVisited = (await chrome.storage.local.get(['pagesVisited'])).pagesVisited;
+      let pagesVisited = (await chrome.storage.local.get(['pagesVisited']))
+        .pagesVisited;
 
       if (typeof pagesVisited === 'undefined') {
         await chrome.storage.local.set({ pagesVisited: [] });
@@ -105,6 +113,7 @@ async function updateTabTime(tabId, isTabClosing = false) {
       //     pagesVisited.push(...response.pagesVisited);
       //   }
       // }
+
       let domainIndex = pagesVisited.findIndex(
         (item) => item.domainName === domainData.mainDomain
       );
@@ -133,9 +142,11 @@ async function updateTabTime(tabId, isTabClosing = false) {
       }
 
       await chrome.storage.local.set({ pagesVisited: pagesVisited });
-      if (isTabClosing) activeTab = null;
+      if (isTabClosing) {
+        delete tabDetails[tabId]; // Remove tab info after updating
+      }
     } catch (error) {
-      console.error('Error updating tab time:', error);
+      console.log('[Error] updating tab time:', error);
     }
   }
 }
@@ -185,19 +196,29 @@ async function initializeTracking() {
   });
 
   chrome.tabs.onActivated.addListener(async (activeInfo) => {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab && tab.url && !urlIsExcluded(tab.url)) {
+      storeTabDetails(activeInfo.tabId, tab.url);
+    }
     await updateTabTime(activeTab);
     activeTab = activeInfo.tabId;
-    startTime = new Date().getTime();
   });
 
-  chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-    if (changeInfo.status === 'complete' && tabId === activeTab) {
+  chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (
+      changeInfo.status === 'complete' &&
+      tab.url &&
+      !urlIsExcluded(tab.url)
+    ) {
+      storeTabDetails(tabId, tab.url);
+    }
+    if (tabId === activeTab) {
       await updateTabTime(activeTab);
-      startTime = new Date().getTime();
     }
   });
 
-  chrome.tabs.onRemoved.addListener(async (tabId) => {
+  chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+    console.log(removeInfo);
     await updateTabTime(tabId, true);
   });
 
@@ -217,13 +238,17 @@ async function initializeTracking() {
 
 async function checkAuthentication() {
   try {
-    const { token, grantedScopes } = await chrome.identity.getAuthToken({ interactive: true });
+    const { token, grantedScopes } = await chrome.identity.getAuthToken({
+      interactive: true,
+    });
     if (chrome.runtime.lastError) {
       console.error(chrome.runtime.lastError);
       return null;
     }
 
-    const response = await fetch(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`);
+    const response = await fetch(
+      `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`
+    );
     const userInfo = await response.json();
 
     const { user_email } = await chrome.storage.sync.get('user_email');
@@ -240,11 +265,9 @@ async function checkAuthentication() {
   }
 }
 
-
 (async () => {
   const userInfo = await checkAuthentication();
   if (userInfo) {
-    // Start tracking actions
     initializeTracking();
   }
 
