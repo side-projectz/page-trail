@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@picocss/pico": "^1.5.10",
     "crypto-js": "^4.2.0",
     "firebase": "^10.7.1",
     "glob": "^10.2.3",

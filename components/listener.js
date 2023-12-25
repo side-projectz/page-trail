@@ -64,20 +64,20 @@ const Listener = () => {
     <>
       <Head>
         <title>Domain Time Tracker</title>
-        <link
-          href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css'
-          rel='stylesheet'
-        />
         <style>{`
           body {
-            width: 400px;
+            width: 400px !important;
             padding: 10px;
+          }
+
+          h1{
+            margin-bottom: 16px !important;
           }
         `}</style>
       </Head>
 
       <div>
-        <h1>Domain Time Tracker</h1>
+        <h1>PageTrail</h1>
 
         <label htmlFor='sortOptions'>Sort by:</label>
         <select
@@ -88,8 +88,8 @@ const Listener = () => {
           <option value='recentSpent'>Recent Spent</option>
         </select>
 
-        <div className='table-responsive'>
-          <table className='table' id='domainList'>
+        <div>
+          <table>
             <thead>
               <tr>
                 <th scope='col'>Domain Name</th>
@@ -97,7 +97,7 @@ const Listener = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedDomains.map((domain, index) => (
+              {sortedDomains.map((domain, index) => index < 5 && (
                 <tr key={index}>
                   <td>{domain.domainName}</td>
                   <td>{formatTime(domain.time)}</td>
