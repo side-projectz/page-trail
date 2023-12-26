@@ -1,8 +1,7 @@
 'use client';
 
-import Listener from '@/components/listener';
-import Image from 'next/image'
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Listener from '../components/listener';
 
 export default function Home() {
   const [isTrackingEnabled, setIsTrackingEnabled] = useState(false);
@@ -53,12 +52,11 @@ export default function Home() {
     );
   }
 
-
   return (
     <>
       Signed in as {user} <br />
       {isTrackingEnabled && <Listener />}
       {!isTrackingEnabled && <div>Waiting for tracking authorization...</div>}
     </>
-  )
+  );
 }

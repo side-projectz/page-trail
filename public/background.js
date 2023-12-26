@@ -1,28 +1,22 @@
-let activeTab: number | null = null;
-let isWindowFocused: boolean = true;
-let startTime: number = new Date().getTime();
-interface TabDetail {
-  url: string;
-  startTime: number;
-  scriptInjected: boolean;
-}
-
-let tabDetails: Record<number, TabDetail> = {};
+let activeTab = null;
+let tabDetails = {};
 
 const exclusionRules = {
   urlPatterns: ['chrome://', 'about:'],
   domains: [],
 };
 
-function urlIsExcluded(url: string): boolean {
+function urlIsExcluded(url) {
   return (
     exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
-    exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain))
+    exclusionRules.domains.some((domain) =>
+      new URL(url).hostname.includes(domain)
+    )
   );
 }
 
 
-function injectContentScript(tabId: number): void {
+function injectContentScript(tabId) {
   chrome.tabs.sendMessage(tabId, { action: "checkScript" }, (response) => {
     if (chrome.runtime.lastError || !response?.scriptActive) {
       chrome.tabs.executeScript(tabId, { file: "contentScript.js" }, () => {
@@ -35,7 +29,8 @@ function injectContentScript(tabId: number): void {
   });
 }
 
-function storeTabDetails(tabId: number, url: string, scriptInjected = false): void {
+function storeTabDetails(tabId, url, scriptInjected = false) {
+
   tabDetails[tabId] = {
     url: url,
     startTime: new Date().getTime(),
@@ -43,22 +38,32 @@ function storeTabDetails(tabId: number, url: string, scriptInjected = false): vo
   };
 
   if (!urlIsExcluded(url)) {
-    chrome.tabs.sendMessage(tabId, { action: "getMeta" }, function (response) {
-      console.log(response);
+    // chrome.tabs.sendMessage(tabId, { greeting: "hello" }, function (response) {
+    //   console.log("response", response);
+    // });
+
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      if (tabs[0].status === "complete") {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "getMeta" }, function (response) {
+          console.log(response);
+        });
+      }
     });
   }
+
 }
 
-
-
-function getMainDomain(url: string): { mainDomain: string; hostname: string } | null {
+function getMainDomain(url) {
   try {
     const parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname;
     const parts = hostname.split('.').reverse();
-    let mainDomain = parts.length > 2 && (parts[1].length === 2 || ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
-      ? parts[2] + '.' + parts[1] + '.' + parts[0]
-      : parts[1] + '.' + parts[0];
+    let mainDomain =
+      parts.length > 2 &&
+        (parts[1].length === 2 ||
+          ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
+        ? parts[2] + '.' + parts[1] + '.' + parts[0]
+        : parts[1] + '.' + parts[0];
 
     return { mainDomain, hostname };
   } catch (error) {
@@ -66,7 +71,6 @@ function getMainDomain(url: string): { mainDomain: string; hostname: string } | 
     return null;
   }
 }
-
 
 async function updateLastSyncTime() {
   const lastSync = {
@@ -106,7 +110,7 @@ async function sendDataToServer() {
   }
 }
 
-async function updateTabTime(tabId: number, isTabClosing = false) {
+async function updateTabTime(tabId, isTabClosing = false) {
   let tabInfo = tabDetails[tabId];
 
   if (tabId !== null && (isWindowFocused || isTabClosing) && tabInfo) {
@@ -129,8 +133,8 @@ async function updateTabTime(tabId: number, isTabClosing = false) {
       }
 
       if (pagesVisited.length > 0) {
-        const {user_email} = await chrome.storage.sync.get('user_email')
-        const response = await (await fetch(` https://page-trail-dashboard.vercel.app/api/extension?email=${user_email}`, {
+        const email = await chrome.storage.sync.get('user_email')
+        const response = await (await fetch(` https://page-trail-dashboard.vercel.app/api/extension?email=${email}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -143,7 +147,7 @@ async function updateTabTime(tabId: number, isTabClosing = false) {
       }
 
       let domainIndex = pagesVisited.findIndex(
-        (item:any) => item.domainName === domainData.mainDomain
+        (item) => item.domainName === domainData.mainDomain
       );
 
       if (domainIndex === -1) {
@@ -155,7 +159,7 @@ async function updateTabTime(tabId: number, isTabClosing = false) {
         });
       } else {
         let page = pagesVisited[domainIndex].pages.find(
-          (p:any) => p.page === tab.url
+          (p) => p.page === tab.url
         );
         if (!page) {
           pagesVisited[domainIndex].pages.push({
@@ -188,7 +192,7 @@ async function resetDataIfNeeded() {
   const lastResetTime = lastReset ? new Date(lastReset.time) : new Date(0);
   const lastSyncTime = lastSync ? new Date(lastSync.time) : new Date(0);
 
-  if ((lastSyncTime > lastResetTime) && +now - +lastResetTime > 86400000) {
+  if (lastSyncTime > lastResetTime && now - lastResetTime > 86400000) {
     // 86400000 ms = 24 hours
     await chrome.storage.local.set({ pagesVisited: [] });
     console.log('Data has been reset.');
@@ -205,7 +209,7 @@ async function initializeTracking() {
   await chrome.alarms.create('checkDataReset', { periodInMinutes: 240 });
 
   chrome.windows.onFocusChanged.addListener(async (windowId) => {
-    if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
       isWindowFocused = false;
       await updateTabTime(activeTab, true);
       activeTab = null;
@@ -215,9 +219,9 @@ async function initializeTracking() {
         active: true,
         currentWindow: true,
       });
-      if (tabs[0] && tabs[0].status === "complete" && tabs[0].url && !urlIsExcluded(tabs[0].url) && activeTab) {
+      if (tabs[0]) {
         await updateTabTime(activeTab);
-        activeTab = tabs[0].id ?? null;
+        activeTab = tabs[0].id;
         startTime = new Date().getTime();
       }
     }
@@ -225,21 +229,19 @@ async function initializeTracking() {
 
   chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const tab = await chrome.tabs.get(activeInfo.tabId);
-    if (tab.status === "complete" && tab.url && !urlIsExcluded(tab.url)) {
+    if (tab.status === "complete" && tab && tab.url && !urlIsExcluded(tab.url)) {
       storeTabDetails(activeInfo.tabId, tab.url);
-    }
-    if (!activeTab) {
-      activeTab = activeInfo.tabId;
     }
     await updateTabTime(activeTab);
     activeTab = activeInfo.tabId;
   });
 
   chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (changeInfo.url && tab.url && !urlIsExcluded(tab.url)) {
-      // Handle URL change within the same tab
-      storeTabDetails(tabId, tab.url, true);
-      injectContentScript(tabId);
+    if (changeInfo.status === 'complete' && tab.url && !urlIsExcluded(tab.url)) {
+      if (!tabDetails[tabId] || !tabDetails[tabId].scriptInjected) {
+        storeTabDetails(tabId, tab.url, true);
+        injectContentScript(tabId);
+      }
     }
     if (tabId === activeTab) {
       await updateTabTime(activeTab);
