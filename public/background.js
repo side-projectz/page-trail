@@ -15,11 +15,42 @@ function urlIsExcluded(url) {
   );
 }
 
-function storeTabDetails(tabId, url) {
+
+function injectContentScript(tabId) {
+  chrome.tabs.sendMessage(tabId, { action: "checkScript" }, (response) => {
+    if (chrome.runtime.lastError || !response?.scriptActive) {
+      chrome.tabs.executeScript(tabId, { file: "contentScript.js" }, () => {
+        if (chrome.runtime.lastError) {
+          console.error('Failed to inject script:', chrome.runtime.lastError.message);
+        }
+      });
+      tabDetails[tabId].scriptInjected = true;
+    }
+  });
+}
+
+function storeTabDetails(tabId, url, scriptInjected = false) {
+
   tabDetails[tabId] = {
     url: url,
     startTime: new Date().getTime(),
+    scriptInjected: scriptInjected,
   };
+
+  if (!urlIsExcluded(url)) {
+    // chrome.tabs.sendMessage(tabId, { greeting: "hello" }, function (response) {
+    //   console.log("response", response);
+    // });
+
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      if (tabs[0].status === "complete") {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "getMeta" }, function (response) {
+          console.log(response);
+        });
+      }
+    });
+  }
+
 }
 
 function getMainDomain(url) {
@@ -29,8 +60,8 @@ function getMainDomain(url) {
     const parts = hostname.split('.').reverse();
     let mainDomain =
       parts.length > 2 &&
-      (parts[1].length === 2 ||
-        ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
+        (parts[1].length === 2 ||
+          ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
         ? parts[2] + '.' + parts[1] + '.' + parts[0]
         : parts[1] + '.' + parts[0];
 
@@ -63,16 +94,16 @@ async function sendDataToServer() {
   try {
     const { pagesVisited } = await chrome.storage.local.get(['pagesVisited']);
     if (pagesVisited) {
-      // await redisUtils.setDataInRedis(pagesVisited);
-      // const response = await fetch(`chrome-extension://lalpgpioopjnjbapmmmnjckppogncaog/api/redis`, {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({ pagesVisited }),
-      // })
-      // console.log('Data sent successfully:', await response.json());
-      // await updateLastSyncTime();
+      const email = await chrome.storage.sync.get('user_email')
+      const response = await fetch(`https://page-trail-dashboard.vercel.app/api/extension`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, data: pagesVisited }),
+      })
+      console.log('Data sent successfully:', await response.json());
+      await updateLastSyncTime();
     }
   } catch (error) {
     console.log('[Error] sending data:', error);
@@ -82,7 +113,7 @@ async function sendDataToServer() {
 async function updateTabTime(tabId, isTabClosing = false) {
   let tabInfo = tabDetails[tabId];
 
-  if (tabId !== null && (isWindowFocused || isTabClosing) && tabInfo) {
+  if (tabId !== null && (isTabClosing) && tabInfo) {
     let currentTime = new Date().getTime();
     let duration = currentTime - tabInfo.startTime;
     try {
@@ -101,18 +132,19 @@ async function updateTabTime(tabId, isTabClosing = false) {
         pagesVisited = [];
       }
 
-      // if (pagesVisited.length > 0) {
-      //   const response = await (await fetch(`chrome-extension://lalpgpioopjnjbapmmmnjckppogncaog/api/redis`, {
-      //     method: 'GET',
-      //     headers: {
-      //       'Content-Type': 'application/json',
-      //     },
-      //   })).json();
+      if (pagesVisited.length > 0) {
+        const email = await chrome.storage.sync.get('user_email')
+        const response = await (await fetch(` https://page-trail-dashboard.vercel.app/api/extension?email=${email}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })).json();
 
-      //   if (response) {
-      //     pagesVisited.push(...response.pagesVisited);
-      //   }
-      // }
+        // if (response.status === 200) {
+        //   pagesVisited.push(...response.pagesVisited);
+        // }
+      }
 
       let domainIndex = pagesVisited.findIndex(
         (item) => item.domainName === domainData.mainDomain
@@ -197,7 +229,7 @@ async function initializeTracking() {
 
   chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const tab = await chrome.tabs.get(activeInfo.tabId);
-    if (tab && tab.url && !urlIsExcluded(tab.url)) {
+    if (tab.status === "complete" && tab && tab.url && !urlIsExcluded(tab.url)) {
       storeTabDetails(activeInfo.tabId, tab.url);
     }
     await updateTabTime(activeTab);
@@ -205,12 +237,11 @@ async function initializeTracking() {
   });
 
   chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (
-      changeInfo.status === 'complete' &&
-      tab.url &&
-      !urlIsExcluded(tab.url)
-    ) {
-      storeTabDetails(tabId, tab.url);
+    if (changeInfo.status === 'complete' && tab.url && !urlIsExcluded(tab.url)) {
+      if (!tabDetails[tabId] || !tabDetails[tabId].scriptInjected) {
+        storeTabDetails(tabId, tab.url, true);
+        injectContentScript(tabId);
+      }
     }
     if (tabId === activeTab) {
       await updateTabTime(activeTab);
@@ -284,3 +315,4 @@ async function checkAuthentication() {
     }
   });
 })();
+

@@ -2,11 +2,17 @@
   "name": "PageTrail",
   "version": "1.0.0",
   "description": "This Extension tracks your daily surfing activity",
-  "permissions": ["storage", "webNavigation", "tabs", "alarms", "identity"],
+  "permissions": ["storage", "webNavigation","activeTab", "tabs", "alarms", "identity"],
   "host_permissions": ["https://*/*", "http://*/*"],
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+        "matches": ["<all_urls>"],
+        "js": ["contentScript.js"]
+    }
+  ],
   "action": {
     "default_icon": {
       "16": "./icons/Icon-16.png",
