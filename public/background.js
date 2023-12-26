@@ -113,7 +113,7 @@ async function sendDataToServer() {
 async function updateTabTime(tabId, isTabClosing = false) {
   let tabInfo = tabDetails[tabId];
 
-  if (tabId !== null && (isTabClosing) && tabInfo) {
+  if (tabId !== null && (isWindowFocused || isTabClosing) && tabInfo) {
     let currentTime = new Date().getTime();
     let duration = currentTime - tabInfo.startTime;
     try {
