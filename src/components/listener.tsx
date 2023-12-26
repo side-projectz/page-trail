@@ -1,10 +1,10 @@
 import Head from 'next/head';
 import React, { useEffect, useState } from 'react';
 
-function formatTime(milliseconds) {
-  let seconds = Math.floor(milliseconds / 1000);
-  let minutes = Math.floor(seconds / 60);
-  let hours = Math.floor(minutes / 60);
+function formatTime(milliseconds:number) {
+  let seconds: number | string = Math.floor(milliseconds / 1000);
+  let minutes: number | string = Math.floor(seconds / 60);
+  let hours: number | string = Math.floor(minutes / 60);
 
   seconds = seconds % 60;
   minutes = minutes % 60;
@@ -19,19 +19,19 @@ function formatTime(milliseconds) {
 
 const Listener = () => {
   const [sortOption, setSortOption] = useState('topSpent');
-  const [sortedDomains, setSortedDomains] = useState([]);
+  const [sortedDomains, setSortedDomains] = useState<any[]>([]);
 
   useEffect(() => {
     const loadData = () => {
-      chrome.storage.local.get('pagesVisited', function (result) {
+      chrome.storage.local.get('pagesVisited', function (result: any) {
         const pagesVisited = result.pagesVisited || [];
-        let domainTimeMap = {};
+        let domainTimeMap: any = {};
 
         // Aggregate time by domain
-        pagesVisited.forEach((domain) => {
+        pagesVisited.forEach((domain: any) => {
           domainTimeMap[domain.domainName] =
             domainTimeMap[domain.domainName] || 0;
-          domain.pages.forEach((page) => {
+          domain.pages.forEach((page: any) => {
             domainTimeMap[domain.domainName] += page.timeSpent ?? 0;
           });
         });
