@@ -24,8 +24,8 @@ export default function Home() {
           response.isAuthenticated ? 'authenticated' : 'not authenticated'
         );
         if (response.isAuthenticated) {
-          const user = await chrome.storage.sync.get('user_email');
-          setUser(user.user_email);
+          const user = response.user
+          setUser(user);
           setIsTrackingEnabled(true);
           setStatus('authenticated');
         } else {
@@ -53,7 +53,7 @@ export default function Home() {
 
   return (
     <>
-      Signed in as {user} <br />
+      Signed in as {user.email} <br />
       {isTrackingEnabled && <Listener />}
       {!isTrackingEnabled && <div>Waiting for tracking authorization...</div>}
     </>

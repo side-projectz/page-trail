@@ -23,10 +23,14 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 
   if (request.action === "checkScript") {
     sendResponse({ scriptActive: true });
+    return true; 
   }
 
   if (request.action === "getMeta") {
     const meta = extractMetaTags();
     sendResponse({ title: document.title, url: window.location.href, meta });
+    return true;
   }
+
+  return false;
 });

@@ -56,6 +56,11 @@ const Listener = () => {
 
         setSortedDomains(sortedDomainsArray);
       });
+
+      chrome.storage.local.get('pageList', function (result) {
+        console.log('pageList', result.pageList);
+      })
+
     };
 
     loadData();

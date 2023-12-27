@@ -1,15 +1,32 @@
-// background.js
-
-const pageList = {};
-const tabsTrack = {};
+let tabsTrack = {};
+let pageList = [];
 
 const exclusionRules = {
-    urlPatterns: ['chrome://', 'about:', "chrome-extension://"],
+    urlPatterns: ['chrome://', 'about:', 'chrome-extension://'],
     domains: [],
 };
 
+function urlIsExcluded(url) {
+    return url === '' ||
+           exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
+           exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain));
+}
 
-function savePageList() {
+function getMainDomain(url) {
+    try {
+        const parsedUrl = new URL(url);
+        const hostname = parsedUrl.hostname;
+        const parts = hostname.split('.').reverse();
+        return parts.length > 2 && (parts[1].length === 2 || ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
+               ? parts[2] + '.' + parts[1] + '.' + parts[0]
+               : parts[1] + '.' + parts[0];
+    } catch (error) {
+        console.error('Invalid URL:', error);
+        return '';
+    }
+}
+
+function saveData() {
     chrome.storage.local.set({ pageList }, () => {
         if (chrome.runtime.lastError) {
             console.error('Error saving page list:', chrome.runtime.lastError.message);
@@ -27,9 +44,8 @@ function loadPageList() {
 
 async function sendDataToServer() {
     // Implement your data synchronization logic here
-    // ...
     console.log('Data synchronized to the server.');
-    savePageList(); // Ensure to save any changes made during synchronization
+    saveData();
 }
 
 function resetData() {
@@ -37,37 +53,13 @@ function resetData() {
         let lastResetDate = result.lastResetDate;
         let today = new Date().toDateString();
 
-        // Only reset if we haven't reset today already
         if (lastResetDate !== today) {
-            pageList = {};
+            pageList = [];
             chrome.storage.local.set({ pageList, lastResetDate: today }, () => {
                 console.log('Data has been reset.');
             });
         }
     });
-
-}
-
-function urlIsExcluded(url) {
-    return (
-        exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
-        exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain))
-    );
-}
-
-function getMainDomain(url) {
-    try {
-        const parsedUrl = new URL(url);
-        const hostname = parsedUrl.hostname;
-        const parts = hostname.split('.').reverse();
-        let mainDomain = parts.length > 2 && (parts[1].length === 2 || ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
-            ? parts[2] + '.' + parts[1] + '.' + parts[0]
-            : parts[1] + '.' + parts[0];
-        return mainDomain;
-    } catch (error) {
-        console.error('Invalid URL:', error);
-        return '';
-    }
 }
 
 function authenticateUser(callback) {
@@ -92,17 +84,25 @@ function authenticateUser(callback) {
 
 function updateTabDetails(tab, eventContext) {
     const { windowId, id, url } = tab;
-    const tabDetails = {
-        windowId,
-        tabId: id,
-        page: url,
-        domain: getMainDomain(url),
-        timeSpent: 0,
-        lastVisited: new Date().toISOString(),
-        meta: null // Placeholder for meta details
-    };
+    const existingPageIndex = pageList.findIndex(page => page.url === url);
 
-    // Only fetch and send the getMeta message if the tab was created or updated
+    let tabDetails;
+    if (existingPageIndex > -1) {
+        tabDetails = pageList[existingPageIndex];
+        tabDetails.lastVisited = new Date().toISOString();
+    } else {
+        tabDetails = {
+            windowId,
+            tabId: id,
+            page: url,
+            domain: getMainDomain(url),
+            timeSpent: 0,
+            lastVisited: new Date().toISOString(),
+            meta: null
+        };
+        pageList.push(tabDetails);
+    }
+
     if (eventContext === 'created' || eventContext === 'updated') {
         chrome.tabs.sendMessage(id, { action: 'getMeta' }, (response) => {
             if (chrome.runtime.lastError) {
@@ -112,26 +112,39 @@ function updateTabDetails(tab, eventContext) {
             if (response) {
                 tabDetails.meta = response;
             }
-            allTabs[id] = tabDetails;
+            saveData();
         });
     } else {
-        allTabs[id] = tabDetails;
+        saveData();
     }
 }
 
 function initializeAlarms() {
-    // Create an alarm for data synchronization every 2 hours
     chrome.alarms.create('syncData', { periodInMinutes: 120 });
-
-
     let now = new Date();
-    let nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0); // Set to 00:01 to ensure it's just past midnight
-    let delayInMinutes = Math.round((nextMidnight.getTime() - now.getTime()) / (1000 * 60)); // Convert delay to minutes
-
-    chrome.alarms.create('dailyReset', { delayInMinutes, periodInMinutes: 1440 }); // Schedule the first reset just after midnight, and repeat daily
-
+    let nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0);
+    let delayInMinutes = Math.round((nextMidnight.getTime() - now.getTime()) / 60000);
+    chrome.alarms.create('dailyReset', { delayInMinutes, periodInMinutes: 1440 });
 }
 
+function aggregateDataToPageList(tabId) {
+    let trackedTab = tabsTrack[tabId];
+    if (trackedTab) {
+        let pageIndex = pageList.findIndex(page => page.url === trackedTab.url);
+        if (pageIndex > -1) {
+            let elapsedTime = new Date().getTime() - trackedTab.lastVisited;
+            pageList[pageIndex].timeSpent += isNaN(elapsedTime) ? 0 : elapsedTime;
+        } else {
+            pageList.push({
+                url: trackedTab.url,
+                domain: getMainDomain(trackedTab.url),
+                timeSpent: trackedTab.timeSpent,
+                lastVisited: new Date().toISOString()
+            });
+        }
+        saveData();
+    }
+}
 
 chrome.tabs.query({}, (tabs) => {
     tabs.forEach((tab) => {
@@ -141,9 +154,7 @@ chrome.tabs.query({}, (tabs) => {
                 pageList[domain] = {
                     url: tab.url,
                     domain,
-                    meta: {
-                        title: tab.title,
-                    },
+                    meta: { title: tab.title },
                     timeSpent: 0,
                     lastVisited: new Date().toISOString(),
                     enteredTimeStamp: new Date().getTime()
@@ -161,84 +172,79 @@ chrome.tabs.onCreated.addListener((tab) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    if (changeInfo.status === 'complete' && !urlIsExcluded(tab.url)) {
-        updateTabDetails(tab, 'updated');
+    if (changeInfo.status === 'complete' && tab.url && !urlIsExcluded(tab.url)) {
+        if (tabsTrack[tabId]) {
+            let now = new Date().getTime();
+            tabsTrack[tabId].timeSpent += now - tabsTrack[tabId].lastVisited;
+            aggregateDataToPageList(tabId);
+        }
+        tabsTrack[tabId] = { url: tab.url, lastVisited: new Date().getTime(), timeSpent: 0 };
     }
-    savePageList();
 });
 
-chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-    const tabTrack = tabsTrack[tabId];
-    if (tabTrack) {
-        const page = pageList[tabTrack.url];
-        if (page) {
-            // Calculate time spent before removal
-            page.timeSpent += new Date().getTime() - page.enteredTimeStamp;
-            // Optionally send page timeSpent data to your server or storage
-        }
+chrome.tabs.onRemoved.addListener(tabId => {
+    if (tabsTrack[tabId]) {
+        aggregateDataToPageList(tabId);
         delete tabsTrack[tabId];
     }
-    savePageList();
 });
 
-chrome.tabs.onActivated.addListener((activeInfo) => {
-    const tab = allTabs[activeInfo.tabId];
-    if (tab) {
-        tab.lastVisited = new Date().toISOString();
-    }
-    savePageList();
-});
-
-chrome.windows.onFocusChanged.addListener((windowId) => {
-    chrome.tabs.query({ active: true, windowId }, (tabs) => {
-        const tab = tabs[0];
-        if (tab && !urlIsExcluded(tab.url)) {
-            const trackedTab = allTabs[tab.id];
-            if (trackedTab) {
-                trackedTab.lastVisited = new Date().toISOString();
+chrome.tabs.onActivated.addListener(activeInfo => {
+    chrome.tabs.get(activeInfo.tabId, tab => {
+        if (tab.url && !urlIsExcluded(tab.url)) {
+            let now = new Date().getTime();
+            if (tabsTrack[tab.id]) {
+                let elapsedTime = now - tabsTrack[tab.id].lastVisited;
+                tabsTrack[tab.id].timeSpent += isNaN(elapsedTime) ? 0 : elapsedTime;
+            } else {
+                tabsTrack[tab.id] = { url: tab.url, lastVisited: now, timeSpent: 0 };
             }
         }
-        savePageList();
     });
 });
 
-// When the browser starts up, reload the pageList
+chrome.windows.onFocusChanged.addListener(windowId => {
+    chrome.tabs.query({ active: true, windowId }, (tabs) => {
+        const tab = tabs[0];
+        if (tab && !urlIsExcluded(tab.url)) {
+            const trackedTab = tabsTrack[tab.id];
+            if (trackedTab) {
+                trackedTab.lastVisited = new Date().toISOString();
+                saveData();
+            }
+        }
+    });
+});
+
 chrome.runtime.onStartup.addListener(() => {
     loadPageList();
     initializeAlarms();
 });
 
-chrome.runtime.onInstalled.addListener((details) => {
+chrome.runtime.onInstalled.addListener(details => {
     if (details.reason === "install" || details.reason === "update") {
         initializeAlarms();
-        // Other installation or update related logic
     }
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener(alarm => {
     if (alarm.name === 'syncData') {
-        // Call your data synchronization function
         sendDataToServer();
     } else if (alarm.name === 'resetData') {
-        // Reset the data
         sendDataToServer().then(() => {
             resetData();
         });
     }
 });
 
-// Listen for messages from content scripts or popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'authenticate') {
-        authenticateUser((userInfo) => {
+    if (request.action === 'checkAuth') {
+        authenticateUser(userInfo => {
             sendResponse({ isAuthenticated: !!userInfo, user: userInfo });
         });
-        return true; // Indicate that the response is sent asynchronously
+        return true;
     }
 });
 
-
-// Call this function after loading the pageList and authenticating the user
 initializeAlarms();
-// Call this function when the extension is loaded/reloaded
 loadPageList();
