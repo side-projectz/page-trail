@@ -1,46 +1,60 @@
-"use strict";
+// background.js
 
-let activeTab = null;
-let isWindowFocused = true;
-let startTime = new Date().getTime();
-let tabDetails = {};
+const pageList = {};
+const tabsTrack = {};
 
 const exclusionRules = {
     urlPatterns: ['chrome://', 'about:', "chrome-extension://"],
     domains: [],
 };
 
-function urlIsExcluded(url) {
-    return (exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
-        exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain)));
-}
 
-function injectContentScript(tabId) {
-    chrome.tabs.sendMessage(tabId, { action: "checkScript" }, (response) => {
-        if (chrome.runtime.lastError || !(response === null || response === undefined ? undefined : response.scriptActive)) {
-            chrome.tabs.executeScript(tabId, { file: "contentScript.js" }, () => {
-                if (chrome.runtime.lastError) {
-                    console.error('Failed to inject script:', chrome.runtime.lastError.message);
-                }
-            });
-            tabDetails[tabId].scriptInjected = true;
+function savePageList() {
+    chrome.storage.local.set({ pageList }, () => {
+        if (chrome.runtime.lastError) {
+            console.error('Error saving page list:', chrome.runtime.lastError.message);
         }
     });
 }
 
-function storeTabDetails(tabId, url, scriptInjected = false, sendMeta = false) {
-    const previousUrl = tabDetails[tabId] ? tabDetails[tabId].url : null;
-    tabDetails[tabId] = {
-        url: url,
-        startTime: new Date().getTime(),
-        scriptInjected: scriptInjected,
-    };
-    if (!urlIsExcluded(url) && sendMeta && url !== previousUrl) {
-        chrome.tabs.sendMessage(tabId, { action: "getMeta" }, function (response) {
-            console.log(response);
-        });
-    }
+function loadPageList() {
+    chrome.storage.local.get(['pageList'], (result) => {
+        if (result.pageList) {
+            pageList = result.pageList;
+        }
+    });
 }
+
+async function sendDataToServer() {
+    // Implement your data synchronization logic here
+    // ...
+    console.log('Data synchronized to the server.');
+    savePageList(); // Ensure to save any changes made during synchronization
+}
+
+function resetData() {
+    chrome.storage.local.get(['lastResetDate'], (result) => {
+        let lastResetDate = result.lastResetDate;
+        let today = new Date().toDateString();
+
+        // Only reset if we haven't reset today already
+        if (lastResetDate !== today) {
+            pageList = {};
+            chrome.storage.local.set({ pageList, lastResetDate: today }, () => {
+                console.log('Data has been reset.');
+            });
+        }
+    });
+
+}
+
+function urlIsExcluded(url) {
+    return (
+        exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
+        exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain))
+    );
+}
+
 function getMainDomain(url) {
     try {
         const parsedUrl = new URL(url);
@@ -49,267 +63,182 @@ function getMainDomain(url) {
         let mainDomain = parts.length > 2 && (parts[1].length === 2 || ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
             ? parts[2] + '.' + parts[1] + '.' + parts[0]
             : parts[1] + '.' + parts[0];
-        return { mainDomain, hostname };
-    }
-    catch (error) {
+        return mainDomain;
+    } catch (error) {
         console.error('Invalid URL:', error);
-        return null;
+        return '';
     }
 }
-async function updateLastSyncTime() {
-    const lastSync = {
-        time: new Date().toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    };
-    await chrome.storage.sync.set({ lastSync });
-    console.log('lastSync updated:', lastSync);
-}
-async function updateLastResetTime() {
-    const lastReset = {
-        time: new Date().toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    };
-    await chrome.storage.sync.set({ lastReset });
-    console.log('lastReset updated:', lastReset);
-}
-async function sendDataToServer() {
-    try {
-        const { pagesVisited } = await chrome.storage.local.get(['pagesVisited']);
-        if (pagesVisited) {
-            const { user_email } = await chrome.storage.sync.get('user_email');
-            const response = await fetch(`https://page-trail-dashboard.vercel.app/api/extension`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email: user_email, data: pagesVisited }),
-            });
-            console.log('Data sent successfully:', await response.json());
-            await updateLastSyncTime();
-        }
-    }
-    catch (error) {
-        console.log('[Error] sending data:', error);
-    }
-}
-async function updateTabTime(tabId, isTabClosing = false) {
-    let tabInfo = tabDetails[tabId];
-    if (tabId !== null && (isWindowFocused || isTabClosing) && tabInfo) {
-        let currentTime = new Date().getTime();
-        let duration = currentTime - tabInfo.startTime;
-        try {
-            // const tab = await chrome.tabs.get(tabId);
-            const tab = tabInfo;
-            if (!tab || !tab.url || urlIsExcluded(tab.url))
-                return;
-            const domainData = getMainDomain(tab.url);
-            if (!domainData)
-                return;
-            let pagesVisited = (await chrome.storage.local.get(['pagesVisited']))
-                .pagesVisited;
-            if (typeof pagesVisited === "undefined") {
-                await chrome.storage.local.set({ pagesVisited: [] });
-                pagesVisited = [];
-            }
-            if (pagesVisited.length === 0) {
-                const { user_email } = await chrome.storage.sync.get('user_email');
-                const response = await (await fetch(` https://page-trail-dashboard.vercel.app/api/extension?email=${user_email}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                })).json();
-                // if (response.status === 200) {
-                //   pagesVisited.push(...response.pagesVisited);
-                // }
-            }
-            let domainIndex = pagesVisited.findIndex((item) => item.domainName === domainData.mainDomain);
-            if (domainIndex === -1) {
-                pagesVisited.push({
-                    domainName: domainData.mainDomain,
-                    pages: [
-                        { page: tab.url, timeSpent: duration, lastVisited: currentTime },
-                    ],
-                });
-            }
-            else {
-                let page = pagesVisited[domainIndex].pages.find((p) => p.page === tab.url);
-                if (!page) {
-                    pagesVisited[domainIndex].pages.push({
-                        page: tab.url,
-                        timeSpent: duration,
-                        lastVisited: currentTime,
-                    });
-                }
-                else {
-                    page.timeSpent += duration;
-                    page.lastVisited = currentTime;
-                }
-            }
-            await chrome.storage.local.set({ pagesVisited: pagesVisited });
-            if (isTabClosing) {
-                delete tabDetails[tabId]; // Remove tab info after updating
-            }
-        }
-        catch (error) {
-            console.log('[Error] updating tab time:', error);
-        }
-    }
-}
-async function resetDataIfNeeded() {
-    const { lastReset, lastSync } = await chrome.storage.sync.get([
-        'lastReset',
-        'lastSync',
-    ]);
-    const now = new Date();
-    const lastResetTime = lastReset ? new Date(lastReset.time) : new Date(0);
-    const lastSyncTime = lastSync ? new Date(lastSync.time) : new Date(0);
-    if ((lastSyncTime > lastResetTime) && +now - +lastResetTime > 86400000) {
-        // 86400000 ms = 24 hours
-        await chrome.storage.local.set({ pagesVisited: [] });
-        console.log('Data has been reset.');
-        await updateLastResetTime();
-    }
-    else if (lastSyncTime <= lastResetTime) {
-        await sendDataToServer();
-    }
-}
-async function initializeTracking() {
-    await resetDataIfNeeded();
-    // await chrome.alarms.create('dailyReset', { periodInMinutes: 1440 });
-    // await chrome.alarms.create('checkDataReset', { periodInMinutes: 240 });
-    await chrome.alarms.create('sendData', { periodInMinutes: 60 });
-    chrome.windows.onFocusChanged.addListener(async (windowId) => {
-        let tabId;
-        if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
-            isWindowFocused = false;
-            await updateTabTime(activeTab, true);
-            activeTab = null;
-        } else {
-            isWindowFocused = true;
-            const tabs = await chrome.tabs.query({
-                active: true,
-                currentWindow: true,
-            });
-            if (tabs[0] && tabs[0].status === "complete" && tabs[0].url && !urlIsExcluded(tabs[0].url) && activeTab) {
-                await updateTabTime(activeTab);
-                activeTab = (tabId = tabs[0].id) !== null && tabId !== undefined ? tabId : null;
-                startTime = new Date().getTime();
-            }
-        }
-    });
-    chrome.tabs.onActivated.addListener(async (activeInfo) => {
-        const tab = await chrome.tabs.get(activeInfo.tabId);
-        if (tab.status === "complete" && tab.url && !urlIsExcluded(tab.url)) {
-            storeTabDetails(activeInfo.tabId, tab.url, true, tab.url !== tabDetails[activeInfo.tabId]?.url);
-        }
-        await updateTabTime(activeTab);
-        activeTab = activeInfo.tabId;
-    });
-    chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-        if (changeInfo.url && tab.url && !urlIsExcluded(tab.url)) {
-            // Handle URL change within the same tab
-            storeTabDetails(tabId, tab.url, true, true);
-            injectContentScript(tabId);
-        }
-        if (tabId === activeTab) {
-            await updateTabTime(activeTab);
-        }
-    });
-    chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
-        console.log(removeInfo);
-        await updateTabTime(tabId, true);
-    });
-    chrome.alarms.onAlarm.addListener(async (alarm) => {
-        if (alarm.name === 'sendData') {
-            console.log('Sending data to server.......');
-            await sendDataToServer();
-        }
-        if (alarm.name === 'dailyReset') {
-            await chrome.storage.local.set({ pagesVisited: [] });
-        }
-        if (alarm.name === 'checkDataReset') {
-            await resetDataIfNeeded();
-        }
-    });
-}
-async function authenticateUser() {
-    try {
-        const { token } = await chrome.identity.getAuthToken({
-            interactive: true,
-        });
+
+function authenticateUser(callback) {
+    chrome.identity.getAuthToken({ interactive: true }, (token) => {
         if (chrome.runtime.lastError) {
-            console.error(chrome.runtime.lastError);
-            return null;
+            console.error(chrome.runtime.lastError.message);
+            callback(null);
+            return;
         }
-        const response = await fetch(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`);
-        const userInfo = await response.json();
-        const { user_email } = await chrome.storage.sync.get('user_email');
-        if (user_email !== userInfo.email) {
-            await chrome.storage.sync.set({ user_email: userInfo.email });
-            // Initialize tracking if user_email has changed
-            initializeTracking();
-        }
-        return userInfo;
-    }
-    catch (error) {
-        console.error('Authentication error:', error);
-        return null;
+        fetch(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`)
+            .then((response) => response.json())
+            .then((userInfo) => {
+                callback(userInfo);
+                chrome.storage.local.set({ user_email: userInfo.email });
+            })
+            .catch((error) => {
+                console.error('Authentication error:', error);
+                callback(null);
+            });
+    });
+}
+
+function updateTabDetails(tab, eventContext) {
+    const { windowId, id, url } = tab;
+    const tabDetails = {
+        windowId,
+        tabId: id,
+        page: url,
+        domain: getMainDomain(url),
+        timeSpent: 0,
+        lastVisited: new Date().toISOString(),
+        meta: null // Placeholder for meta details
+    };
+
+    // Only fetch and send the getMeta message if the tab was created or updated
+    if (eventContext === 'created' || eventContext === 'updated') {
+        chrome.tabs.sendMessage(id, { action: 'getMeta' }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error(`Error fetching meta for tabId ${id}:`, chrome.runtime.lastError.message);
+                return;
+            }
+            if (response) {
+                tabDetails.meta = response;
+            }
+            allTabs[id] = tabDetails;
+        });
+    } else {
+        allTabs[id] = tabDetails;
     }
 }
 
+function initializeAlarms() {
+    // Create an alarm for data synchronization every 2 hours
+    chrome.alarms.create('syncData', { periodInMinutes: 120 });
 
-(async () => {
-    const userInfo = await authenticateUser();
-    if (userInfo) {
-        initializeTracking();
+
+    let now = new Date();
+    let nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 1, 0); // Set to 00:01 to ensure it's just past midnight
+    let delayInMinutes = Math.round((nextMidnight.getTime() - now.getTime()) / (1000 * 60)); // Convert delay to minutes
+
+    chrome.alarms.create('dailyReset', { delayInMinutes, periodInMinutes: 1440 }); // Schedule the first reset just after midnight, and repeat daily
+
+}
+
+
+chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+        if (tab.status === 'complete' && !urlIsExcluded(tab.url)) {
+            const domain = getMainDomain(tab.url);
+            if (domain) {
+                pageList[domain] = {
+                    url: tab.url,
+                    domain,
+                    meta: {
+                        title: tab.title,
+                    },
+                    timeSpent: 0,
+                    lastVisited: new Date().toISOString(),
+                    enteredTimeStamp: new Date().getTime()
+                };
+                tabsTrack[tab.id] = { url: tab.url, isActive: false };
+            }
+        }
+    });
+});
+
+chrome.tabs.onCreated.addListener((tab) => {
+    if (!urlIsExcluded(tab.url)) {
+        updateTabDetails(tab, 'created');
     }
+});
 
-    chrome.runtime.onMessage.addListener((message, sender, sendResponce) => {
-        if (message.action === 'checkAuth') {
-            authenticateUser().then(user => {
-                sendResponce({ isAuthenticated: true })
-            });
-            return true;
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && !urlIsExcluded(tab.url)) {
+        updateTabDetails(tab, 'updated');
+    }
+    savePageList();
+});
+
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+    const tabTrack = tabsTrack[tabId];
+    if (tabTrack) {
+        const page = pageList[tabTrack.url];
+        if (page) {
+            // Calculate time spent before removal
+            page.timeSpent += new Date().getTime() - page.enteredTimeStamp;
+            // Optionally send page timeSpent data to your server or storage
         }
-    })
+        delete tabsTrack[tabId];
+    }
+    savePageList();
+});
 
-    /** Fired when the extension is first installed,
-     *  when the extension is updated to a new version,
-     *  and when Chrome is updated to a new version. 
-     */
-    chrome.runtime.onInstalled.addListener((details) => {
-        if (details.reason === "install") {
-            chrome.windows.create({
-                type: "popup",
-                url: "index.html",
-                width: 400,
-                height: 400,
-            });
+chrome.tabs.onActivated.addListener((activeInfo) => {
+    const tab = allTabs[activeInfo.tabId];
+    if (tab) {
+        tab.lastVisited = new Date().toISOString();
+    }
+    savePageList();
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+    chrome.tabs.query({ active: true, windowId }, (tabs) => {
+        const tab = tabs[0];
+        if (tab && !urlIsExcluded(tab.url)) {
+            const trackedTab = allTabs[tab.id];
+            if (trackedTab) {
+                trackedTab.lastVisited = new Date().toISOString();
+            }
         }
+        savePageList();
     });
+});
 
-    chrome.runtime.onConnect.addListener((port) => {
-        console.log("[background.js] onConnect", port);
-    });
+// When the browser starts up, reload the pageList
+chrome.runtime.onStartup.addListener(() => {
+    loadPageList();
+    initializeAlarms();
+});
 
-    chrome.runtime.onStartup.addListener(() => {
-        console.log("[background.js] onStartup");
-    });
+chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === "install" || details.reason === "update") {
+        initializeAlarms();
+        // Other installation or update related logic
+    }
+});
 
-    /**
-     *  Sent to the event page just before it is unloaded.
-     *  This gives the extension opportunity to do some clean up.
-     *  Note that since the page is unloading,
-     *  any asynchronous operations started while handling this event
-     *  are not guaranteed to complete.
-     *  If more activity for the event page occurs before it gets
-     *  unloaded the onSuspendCanceled event will
-     *  be sent and the page won't be unloaded. */
-    chrome.runtime.onSuspend.addListener(() => {
-        console.log("[background.js] onSuspend");
-    });
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === 'syncData') {
+        // Call your data synchronization function
+        sendDataToServer();
+    } else if (alarm.name === 'resetData') {
+        // Reset the data
+        sendDataToServer().then(() => {
+            resetData();
+        });
+    }
+});
 
-})();
+// Listen for messages from content scripts or popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'authenticate') {
+        authenticateUser((userInfo) => {
+            sendResponse({ isAuthenticated: !!userInfo, user: userInfo });
+        });
+        return true; // Indicate that the response is sent asynchronously
+    }
+});
 
 
+// Call this function after loading the pageList and authenticating the user
+initializeAlarms();
+// Call this function when the extension is loaded/reloaded
+loadPageList();
