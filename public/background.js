@@ -1,19 +1,23 @@
 "use strict";
+
 let activeTab = null;
 let isWindowFocused = true;
 let startTime = new Date().getTime();
 let tabDetails = {};
+
 const exclusionRules = {
-    urlPatterns: ['chrome://', 'about:'],
+    urlPatterns: ['chrome://', 'about:', "chrome-extension://"],
     domains: [],
 };
+
 function urlIsExcluded(url) {
     return (exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
         exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain)));
 }
+
 function injectContentScript(tabId) {
     chrome.tabs.sendMessage(tabId, { action: "checkScript" }, (response) => {
-        if (chrome.runtime.lastError || !(response === null || response === void 0 ? void 0 : response.scriptActive)) {
+        if (chrome.runtime.lastError || !(response === null || response === undefined ? undefined : response.scriptActive)) {
             chrome.tabs.executeScript(tabId, { file: "contentScript.js" }, () => {
                 if (chrome.runtime.lastError) {
                     console.error('Failed to inject script:', chrome.runtime.lastError.message);
@@ -23,13 +27,15 @@ function injectContentScript(tabId) {
         }
     });
 }
-function storeTabDetails(tabId, url, scriptInjected = false) {
+
+function storeTabDetails(tabId, url, scriptInjected = false, sendMeta = false) {
+    const previousUrl = tabDetails[tabId] ? tabDetails[tabId].url : null;
     tabDetails[tabId] = {
         url: url,
         startTime: new Date().getTime(),
         scriptInjected: scriptInjected,
     };
-    if (!urlIsExcluded(url)) {
+    if (!urlIsExcluded(url) && sendMeta && url !== previousUrl) {
         chrome.tabs.sendMessage(tabId, { action: "getMeta" }, function (response) {
             console.log(response);
         });
@@ -70,13 +76,13 @@ async function sendDataToServer() {
     try {
         const { pagesVisited } = await chrome.storage.local.get(['pagesVisited']);
         if (pagesVisited) {
-            const email = await chrome.storage.sync.get('user_email');
+            const { user_email } = await chrome.storage.sync.get('user_email');
             const response = await fetch(`https://page-trail-dashboard.vercel.app/api/extension`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ email, data: pagesVisited }),
+                body: JSON.stringify({ email: user_email, data: pagesVisited }),
             });
             console.log('Data sent successfully:', await response.json());
             await updateLastSyncTime();
@@ -101,11 +107,11 @@ async function updateTabTime(tabId, isTabClosing = false) {
                 return;
             let pagesVisited = (await chrome.storage.local.get(['pagesVisited']))
                 .pagesVisited;
-            if (typeof pagesVisited === 'undefined') {
+            if (typeof pagesVisited === "undefined") {
                 await chrome.storage.local.set({ pagesVisited: [] });
                 pagesVisited = [];
             }
-            if (pagesVisited.length > 0) {
+            if (pagesVisited.length === 0) {
                 const { user_email } = await chrome.storage.sync.get('user_email');
                 const response = await (await fetch(` https://page-trail-dashboard.vercel.app/api/extension?email=${user_email}`, {
                     method: 'GET',
@@ -170,17 +176,16 @@ async function resetDataIfNeeded() {
 }
 async function initializeTracking() {
     await resetDataIfNeeded();
-    await chrome.alarms.create('dailyReset', { periodInMinutes: 1440 });
+    // await chrome.alarms.create('dailyReset', { periodInMinutes: 1440 });
+    // await chrome.alarms.create('checkDataReset', { periodInMinutes: 240 });
     await chrome.alarms.create('sendData', { periodInMinutes: 60 });
-    await chrome.alarms.create('checkDataReset', { periodInMinutes: 240 });
     chrome.windows.onFocusChanged.addListener(async (windowId) => {
-        var _a;
+        let tabId;
         if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
             isWindowFocused = false;
             await updateTabTime(activeTab, true);
             activeTab = null;
-        }
-        else {
+        } else {
             isWindowFocused = true;
             const tabs = await chrome.tabs.query({
                 active: true,
@@ -188,7 +193,7 @@ async function initializeTracking() {
             });
             if (tabs[0] && tabs[0].status === "complete" && tabs[0].url && !urlIsExcluded(tabs[0].url) && activeTab) {
                 await updateTabTime(activeTab);
-                activeTab = (_a = tabs[0].id) !== null && _a !== void 0 ? _a : null;
+                activeTab = (tabId = tabs[0].id) !== null && tabId !== undefined ? tabId : null;
                 startTime = new Date().getTime();
             }
         }
@@ -196,10 +201,7 @@ async function initializeTracking() {
     chrome.tabs.onActivated.addListener(async (activeInfo) => {
         const tab = await chrome.tabs.get(activeInfo.tabId);
         if (tab.status === "complete" && tab.url && !urlIsExcluded(tab.url)) {
-            storeTabDetails(activeInfo.tabId, tab.url);
-        }
-        if (!activeTab) {
-            activeTab = activeInfo.tabId;
+            storeTabDetails(activeInfo.tabId, tab.url, true, tab.url !== tabDetails[activeInfo.tabId]?.url);
         }
         await updateTabTime(activeTab);
         activeTab = activeInfo.tabId;
@@ -207,7 +209,7 @@ async function initializeTracking() {
     chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         if (changeInfo.url && tab.url && !urlIsExcluded(tab.url)) {
             // Handle URL change within the same tab
-            storeTabDetails(tabId, tab.url, true);
+            storeTabDetails(tabId, tab.url, true, true);
             injectContentScript(tabId);
         }
         if (tabId === activeTab) {
@@ -231,7 +233,7 @@ async function initializeTracking() {
         }
     });
 }
-async function checkAuthentication() {
+async function authenticateUser() {
     try {
         const { token } = await chrome.identity.getAuthToken({
             interactive: true,
@@ -255,20 +257,59 @@ async function checkAuthentication() {
         return null;
     }
 }
+
+
 (async () => {
-    const userInfo = await checkAuthentication();
+    const userInfo = await authenticateUser();
     if (userInfo) {
         initializeTracking();
     }
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+    chrome.runtime.onMessage.addListener((message, sender, sendResponce) => {
         if (message.action === 'checkAuth') {
-            checkAuthentication().then((userInfo) => {
-                sendResponse({ isAuthenticated: userInfo });
+            authenticateUser().then(user => {
+                sendResponce({ isAuthenticated: true })
             });
             return true;
         }
-        if (message.action === 'start_tracking') {
-            initializeTracking();
+    })
+
+    /** Fired when the extension is first installed,
+     *  when the extension is updated to a new version,
+     *  and when Chrome is updated to a new version. 
+     */
+    chrome.runtime.onInstalled.addListener((details) => {
+        if (details.reason === "install") {
+            chrome.windows.create({
+                type: "popup",
+                url: "index.html",
+                width: 400,
+                height: 400,
+            });
         }
     });
+
+    chrome.runtime.onConnect.addListener((port) => {
+        console.log("[background.js] onConnect", port);
+    });
+
+    chrome.runtime.onStartup.addListener(() => {
+        console.log("[background.js] onStartup");
+    });
+
+    /**
+     *  Sent to the event page just before it is unloaded.
+     *  This gives the extension opportunity to do some clean up.
+     *  Note that since the page is unloading,
+     *  any asynchronous operations started while handling this event
+     *  are not guaranteed to complete.
+     *  If more activity for the event page occurs before it gets
+     *  unloaded the onSuspendCanceled event will
+     *  be sent and the page won't be unloaded. */
+    chrome.runtime.onSuspend.addListener(() => {
+        console.log("[background.js] onSuspend");
+    });
+
 })();
+
+

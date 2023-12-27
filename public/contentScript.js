@@ -20,7 +20,6 @@ function extractMetaTags() {
 
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
-  console.log("contentScript request", request);
 
   if (request.action === "checkScript") {
     sendResponse({ scriptActive: true });

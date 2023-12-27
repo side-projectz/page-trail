@@ -20,7 +20,6 @@ export default function Home() {
 
       chrome.runtime.sendMessage({ action: 'checkAuth' }, async (response) => {
         setStatus('check auth response');
-
         setStatus(
           response.isAuthenticated ? 'authenticated' : 'not authenticated'
         );
