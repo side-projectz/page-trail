@@ -16,6 +16,7 @@
   "action": {
     "default_icon": {
       "16": "./icons/Icon-16.png",
+      "24": "./icons/Icon-24.png",
       "32": "./icons/Icon-32.png",
       "48": "./icons/Icon-48.png",
       "64": "./icons/Icon-64.png",
