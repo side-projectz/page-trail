@@ -23,17 +23,20 @@ const Listener = () => {
 
   useEffect(() => {
     const loadData = () => {
-      chrome.storage.local.get('pagesVisited', function (result) {
-        const pagesVisited = result.pagesVisited || [];
+      chrome.storage.local.get('pageList', function (result) {
+        const pagesVisited = result.pageList || [];
         let domainTimeMap = {};
 
         // Aggregate time by domain
-        pagesVisited.forEach((domain) => {
-          domainTimeMap[domain.domainName] =
-            domainTimeMap[domain.domainName] || 0;
-          domain.pages.forEach((page) => {
-            domainTimeMap[domain.domainName] += page.timeSpent ?? 0;
-          });
+        pagesVisited.forEach((page) => {
+
+          const { domain, timeSpent } = page;
+          domainTimeMap[domain] = domainTimeMap[domain] || 0;
+
+          if (timeSpent) {
+            domainTimeMap[domain] += timeSpent;
+          }
+
         });
 
         console.log(domainTimeMap);
@@ -56,11 +59,6 @@ const Listener = () => {
 
         setSortedDomains(sortedDomainsArray);
       });
-
-      chrome.storage.local.get('pageList', function (result) {
-        console.log('pageList', result.pageList);
-      })
-
     };
 
     loadData();
