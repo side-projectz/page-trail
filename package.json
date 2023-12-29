@@ -1,12 +1,13 @@
 {
   "name": "page-trail",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "This Extension tracks your daily surfing activity",
   "main": "index.js",
   "scripts": {
     "clean": "rimraf out/ dist/ .next/",
     "prebuild": "npm run clean",
     "build": "npm run lint && npm run prep",
+    "postbuild": "webpack --config webpack.config.js",
     "prep": "npm run exp && node out.js",
     "exp": "next build",
     "start": "next start",
@@ -21,9 +22,11 @@
   "dependencies": {
     "@picocss/pico": "^1.5.10",
     "crypto-js": "^4.2.0",
+    "deepmerge": "^4.3.1",
     "firebase": "^10.7.1",
     "glob": "^10.2.3",
     "ioredis": "^5.3.2",
+    "loglevel": "^1.8.1",
     "next": "^14.0.4",
     "next-auth": "^4.24.5",
     "react": "^18.2.0",
@@ -37,6 +40,7 @@
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.1.1",
     "rimraf": "^5.0.5",
+    "ts-loader": "^9.5.1",
     "typescript": "^5.3.3",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
