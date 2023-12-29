@@ -4,7 +4,6 @@
   "description": "This Extension tracks your daily surfing activity",
   "main": "index.js",
   "scripts": {
-
     "clean": "rimraf out/ dist/ .next/",
     "prebuild": "npm run clean",
     "build": "npm run lint && npm run prep",
@@ -32,11 +31,14 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.254",
+    "easytimer.js": "^4.6.0",
     "eslint": "^8.56.0",
     "eslint-config-next": "^14.0.4",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.1.1",
     "rimraf": "^5.0.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
   }
 }
