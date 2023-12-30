@@ -13,7 +13,7 @@ import { Tabs } from "./chrome.interface";
 
 
 
-log.setLevel("trace");
+log.setLevel("warn");
 let tabsList: { [key: number]: Tabs } = {};
 let activeTab: Tabs | undefined = undefined;
 

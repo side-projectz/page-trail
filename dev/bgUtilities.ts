@@ -2,7 +2,7 @@ import { Tabs, Domain, Page } from "./chrome.interface";
 import log from 'loglevel';
 import deepmerge from "deepmerge";
 
-log.setLevel("debug");
+log.setLevel("warn");
 
 const exclusionRules: {
     urlPatterns: string[];
@@ -138,7 +138,10 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
     const transformedData: Domain[] = [];
 
     Object.values(tabsList).forEach((tab: Tabs) => {
-        const domainKey = tab.domain || getMainDomain(tab.url || '');
+        if(!tab.url) {
+            return;
+        }
+        const domainKey = tab.domain || getMainDomain(tab.url);
 
         if (urlIsExcluded(tab.url || '')) {
             return;
@@ -182,10 +185,6 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
 
     return transformedData;
 }
-
-
-
-
 
 // Function to merge two arrays based on a unique key
 function mergeByUniqueKey<T>(uniqueKey: keyof T, array1: T[], array2: T[]): T[] {
