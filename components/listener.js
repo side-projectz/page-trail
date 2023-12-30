@@ -104,7 +104,7 @@ const Listener = () => {
             <tbody>
               {(sortedDomains).map(
                 (domain, index) =>
-                // index < 5 && 
+                index < 5 && 
                 (
                   <tr key={index}>
                     <td>{domain.domainName}</td>
