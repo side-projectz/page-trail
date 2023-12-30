@@ -13,13 +13,13 @@ import { Tabs } from "./chrome.interface";
 
 
 
-log.setLevel("debug");
+log.setLevel("trace");
 let tabsList: { [key: number]: Tabs } = {};
 let activeTab: Tabs | undefined = undefined;
 
 
 chrome.tabs.query({}, tabs => {
-    log.trace("[L1] query", tabs)
+    log.debug("[L1] query", tabs)
     tabs.forEach(tab => {
         const { active, id, status, url } = tab
 
@@ -56,7 +56,7 @@ chrome.tabs.query({}, tabs => {
 })
 
 chrome.tabs.onCreated.addListener(tab => {
-    log.trace("[L1] onCreated", tab)
+    log.debug("[L1] onCreated", tab)
     const { id, url } = tab
 
     if (!id || !url) {
@@ -81,7 +81,7 @@ chrome.tabs.onCreated.addListener(tab => {
 })
 
 chrome.tabs.onActivated.addListener(activeInfo => {
-    log.trace("[L1] onActivated", activeInfo)
+    log.debug("[L1] onActivated", activeInfo)
     const { tabId } = activeInfo
 
     if (!tabsList[tabId]) {
@@ -105,20 +105,22 @@ chrome.tabs.onActivated.addListener(activeInfo => {
         tab.isActive = true
         tab.timer.start()
         activeTab = tab
-        log.trace("current activeTab", activeTab);
+        log.debug("current activeTab", activeTab);
         log.debug(activeTab.url, tab.timer.getTimeValues().seconds)
     }
 })
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    log.trace("[L1] onUpdated", tabId, changeInfo, tab)
-    const { url, status } = changeInfo
+    log.debug("[L1] onUpdated - tabId", tabId)
+    log.debug("[L1] onUpdated - changeInfo", JSON.stringify(changeInfo, null, 2))
+    log.debug("[L1] onUpdated - tab", JSON.stringify(tab, null, 2))
 
+    const { status } = changeInfo
     // Initialize or update tab object in tabsList
     if (!tabsList[tabId]) {
         tabsList[tabId] = {
             id: tabId,
-            url: url || undefined,
+            url: tab.url || undefined,
             isActive: false,
             timer: new Timer({
                 startValues: { seconds: 0 },
@@ -129,25 +131,55 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         }
     }
 
-    const updatedTab = tabsList[tabId]
-    updatedTab.url = url || updatedTab.url
+    const updatedTab = tabsList[tabId];
+    log.debug("old tab details", JSON.stringify(updatedTab, null, 2))
+
+    if (
+        changeInfo.status === 'loading' &&
+        tab.status === 'loading' &&
+        updatedTab.url !== tab.url
+    ) {
+        log.debug("url Changed", updatedTab.url, tab.url)
+        log.debug("url Changed - [" + tabId + "]", JSON.stringify(updatedTab)) ;
+        log.debug("url Changed - [timeSpent]", updatedTab.timer.getTimeValues().seconds) ;
+
+        storeData(transformTabsListForStorage({
+            [tabId]: updatedTab
+        }))
+        updatedTab.timer.stop();
+    }
+
+
+    updatedTab.url = tab.url || updatedTab.url
+
+
+    if (status === "completed" && tab.url && tab.url !== "") {
+        // if(activeTab?.id ===tabId ){
+        // }
+
+        if (activeTab && activeTab.url !== tab.url) {
+            log.debug("url changed", activeTab.url, tab.url)
+            activeTab.url = tab.url
+        }
+
+    }
 
     // Check if tab has finished loading
-    if (status === "complete" && url && url !== "") {
-        updatedTab.domain = getMainDomain(url)
+    if (status === "complete" && tab.url && tab.url !== "") {
+        updatedTab.domain = getMainDomain(tab.url)
 
         // Handle based on whether tab is active or in background
         if (tab.active) {
             // Active tab completed loading
             if (activeTab && activeTab.id !== tabId) {
-                log.trace("previously activeTab", activeTab);
+                log.debug("previously activeTab", activeTab);
                 tabsList[activeTab.id].isActive = false
                 tabsList[activeTab.id].timer.pause()
             }
             updatedTab.isActive = true
             updatedTab.timer.start()
             activeTab = updatedTab
-            log.trace("current activeTab", activeTab)
+            log.debug("current activeTab", activeTab)
         } else {
             // Background tab completed loading
             updatedTab.isActive = false
@@ -156,13 +188,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     }
 
     // Update the tabsList
-    tabsList[tabId] = updatedTab
+    if (status === 'complete')
+        tabsList[tabId] = updatedTab;
+
+    log.debug("updated tab details", JSON.stringify(updatedTab, null, 2));
+    log.debug(" onUpdated End ============================================");
 })
 
 
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    log.trace("[L1] onMessage", request, sender)
+    log.debug("[L1] onMessage", request, sender)
     if (request.action === "checkAuth") {
         authenticateUser((userInfo: any) => {
             sendResponse({ isAuthenticated: !!userInfo, user: userInfo })
@@ -173,26 +209,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 })
 
 chrome.runtime.onInstalled.addListener(details => {
-    log.trace("[L1] onInstalled", details)
+    log.debug("[L1] onInstalled", details)
     if (details.reason === "install" || details.reason === "update") {
         initializeAlarms()
     }
 })
 
 chrome.runtime.onStartup.addListener(() => {
-    log.trace("[L1] onStartup")
+    log.debug("[L1] onStartup")
     loadPageList()
 })
 
 chrome.alarms.onAlarm.addListener(alarm => {
-    log.trace("[L1] onAlarm", alarm)
+    log.debug("[L1] onAlarm", alarm)
     if (alarm.name === "syncData") {
         sendDataToServer()
     }
 })
 
 chrome.tabs.onRemoved.addListener(tabId => {
-    log.trace("[L1] onRemoved", tabId);
+    log.debug("[L1] onRemoved", tabId);
 
     if (!tabsList[tabId]) {
         return;
@@ -214,33 +250,32 @@ chrome.tabs.onRemoved.addListener(tabId => {
 });
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
-    log.trace("[L1] onFocusChanged", windowId)
+    // log.debug("[L1] onFocusChanged", windowId)
     if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
-        log.trace("window unfocused")
+        // log.debug("window unfocused")
         tabsList[activeTab.id].isActive = false
         tabsList[activeTab.id].timer.pause()
-        log.trace("previously activeTab", activeTab)
+        // log.debug("previously activeTab", activeTab)
     } else {
         const tabs = await chrome.tabs.query({ active: true, windowId });
-        log.trace("onFocusChanged query", tabs)
+        // log.debug("onFocusChanged query", tabs)
         if (tabs.length === 0 || !tabs[0].id) {
             return
         }
 
         if (tabs.length && tabs[0]?.id in tabsList) {
-            log.trace("window focused")
+            // log.debug("window focused")
             const tabId = tabs[0].id
             tabsList[tabId].isActive = true
             tabsList[tabId].timer.start()
             activeTab = tabsList[tabId]
-            log.trace("current activeTab", activeTab)
-
+            // log.debug("current activeTab", activeTab)
         }
     }
 })
 
 chrome.windows.onRemoved.addListener(windowId => {
-    log.trace("[L1] onRemoved", windowId);
+    log.debug("[L1] onRemoved", windowId);
     chrome.tabs.query({ windowId }, tabs => {
         tabs.forEach(tab => {
             const { id } = tab;

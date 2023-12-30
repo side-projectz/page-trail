@@ -151,7 +151,7 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
             const page: Page = {
                 openedAt: tab.openedAt,
                 page: tab.url || '',
-                timeSpent: tab.timer.getTotalTimeValues().seconds,
+                timeSpent: tab.timer.getTimeValues().seconds,
                 domain: domainKey,
                 meta: {
                     title: '',
@@ -164,7 +164,7 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
             const page = {
                 openedAt: tab.openedAt,
                 page: tab.url || '',
-                timeSpent: tab.timer.getTotalTimeValues().seconds,
+                timeSpent: tab.timer.getTimeValues().seconds,
                 domain: domainKey,
                 meta: {
                     title: '',
