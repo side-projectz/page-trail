@@ -22,31 +22,33 @@ const Listener = () => {
   const [sortedDomains, setSortedDomains] = useState([]);
 
   useEffect(() => {
-    loadData();
-  }, [sortOption]);
-
-  const loadData = () => {
-    chrome.storage.local.get('pagesVisited', function (result) {
-
-      console.log(result)
-
-      const pagesVisited = result.pagesVisited || [];
+    const loadData = async () => {
+      const result = await chrome.storage.local.get('pageList');
+      const pagesVisited = result.pageList || [];
       let domainTimeMap = {};
 
-      // Aggregate time by domain
-      pagesVisited.forEach(domain => {
-        domainTimeMap[domain.domainName] = domainTimeMap[domain.domainName] || 0;
-        domain.pages.forEach(page => {
-          domainTimeMap[domain.domainName] += page.timeSpent ?? 0;
-        });
-      });
+      console.log("pagesVisited", pagesVisited);
+      pagesVisited.forEach((domain) => {
+        console.log("domain", domain);
+        const { pages, domain: name } = domain;
+        let sumOfPages = 0;
 
-      console.log(domainTimeMap);
+        (pages).forEach((page) => {
+          sumOfPages += page.timeSpent;
+        });
+
+        domain.timeSpent = sumOfPages;
+        domainTimeMap[name] = domain.timeSpent;
+      })
+
+      console.log("Time Spent by domain", domainTimeMap);
 
       // Convert map to array for sorting
-      let sortedDomainsArray = Object.keys(domainTimeMap).map(domainName => {
-        return { domainName, time: domainTimeMap[domainName] };
-      });
+      let sortedDomainsArray = Object.keys(domainTimeMap).map(
+        (domainName) => {
+          return { domainName, time: domainTimeMap[domainName] };
+        }
+      );
 
       // Sorting based on the selected option
       if (sortOption === 'topSpent') {
@@ -56,48 +58,60 @@ const Listener = () => {
         // Assuming you have it, the sorting would be like:
         // sortedDomainsArray.sort((a, b) => b.lastVisited - a.lastVisited);
       }
-
+      console.log("sortedDomainsArray", sortedDomainsArray);
       setSortedDomains(sortedDomainsArray);
-    });
-  }
+    }
+
+    loadData();
+  }, [sortOption]);
 
   return (
     <>
       <Head>
         <title>Domain Time Tracker</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
         <style>{`
           body {
-            width: 400px;
+            width: 400px !important;
             padding: 10px;
+          }
+
+          h1{
+            margin-bottom: 16px !important;
           }
         `}</style>
       </Head>
 
       <div>
-        <h1>Domain Time Tracker</h1>
+        <h1>PageTrail</h1>
 
-        <label htmlFor="sortOptions">Sort by:</label>
-        <select id="sortOptions" onChange={(e) => setSortOption(e.target.value)}>
-          <option value="topSpent">Top Spent</option>
-          <option value="recentSpent">Recent Spent</option>
+        <label htmlFor='sortOptions'>Sort by:</label>
+        <select
+          id='sortOptions'
+          onChange={(e) => setSortOption(e.target.value)}
+        >
+          <option value='topSpent'>Top Spent</option>
+          <option value='recentSpent'>Recent Spent</option>
         </select>
 
-        <div className="table-responsive">
-          <table className="table" id="domainList">
+        <div>
+          <table>
             <thead>
               <tr>
-                <th scope="col">Domain Name</th>
-                <th scope="col">Time Spent (hh:mm:ss)</th>
+                <th scope='col'>Domain Name</th>
+                <th scope='col'>Time Spent (hh:mm:ss)</th>
               </tr>
             </thead>
             <tbody>
-              {sortedDomains.map((domain, index) => (
-                <tr key={index}>
-                  <td>{domain.domainName}</td>
-                  <td>{formatTime(domain.time)}</td>
-                </tr>
-              ))}
+              {(sortedDomains).map(
+                (domain, index) =>
+                index < 5 && 
+                (
+                  <tr key={index}>
+                    <td>{domain.domainName}</td>
+                    <td>{formatTime(domain.time * 1000)}</td>
+                  </tr>
+                )
+              )}
             </tbody>
           </table>
         </div>

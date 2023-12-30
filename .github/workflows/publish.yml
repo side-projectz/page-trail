@@ -3,32 +3,32 @@ name: Publish Chrome Extension
 on:
   push:
     branches:
-      - main  # or your default branch
+      - main # or your default branch
 
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4.1.1
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
 
-    - name: Install Dependencies
-      run: yarn install
+      - name: Install Dependencies
+        run: yarn install
 
-    - name: Build the Project
-      run: yarn build
-      
-    - name: Zip dist folder
-      uses: montudor/action-zip@v1
-      with:
-        args: zip -qq -r ./page-trail.zip ./dist
+      - name: Build the Project
+        run: yarn build
 
-    - name: Upload to Chrome Web Store
-      uses: mnao305/chrome-extension-upload@v4.0.1
-      with:
-        file-path: ./page-trail.zip
-        extension-id: lalpgpioopjnjbapmmmnjckppogncaog
-        client-id: ${{ secrets.CLIENT_ID }}
-        client-secret: ${{ secrets.CLIENT_SECRET }}
-        refresh-token: ${{ secrets.REFRESH_TOKEN }}
+      - name: Zip dist folder
+        uses: montudor/action-zip@v1
+        with:
+          args: zip -qq -r ./page-trail.zip ./dist
+
+      - name: Upload to Chrome Web Store
+        uses: mnao305/chrome-extension-upload@v4.0.1
+        with:
+          file-path: ./page-trail.zip
+          extension-id: lalpgpioopjnjbapmmmnjckppogncaog
+          client-id: ${{ secrets.CLIENT_ID }}
+          client-secret: ${{ secrets.CLIENT_SECRET }}
+          refresh-token: ${{ secrets.REFRESH_TOKEN }}
