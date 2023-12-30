@@ -44,6 +44,9 @@ export function storeData(removedPages: Domain[]) {
             const pageList: Domain[] = result.pageList || [];
 
             const mergedData = customDeepMerger(pageList, removedPages);
+
+            log.debug('Merged data:', mergedData);
+
             chrome.storage.local.set({ pageList: mergedData }).then(() => {
                 log.info('Data stored successfully');
             }).catch((error) => {

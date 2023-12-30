@@ -22,44 +22,45 @@ const Listener = () => {
   const [sortedDomains, setSortedDomains] = useState([]);
 
   useEffect(() => {
-    const loadData = () => {
-      chrome.storage.local.get('pageList', function (result) {
-        const pagesVisited = result.pageList || [];
-        let domainTimeMap = {};
+    const loadData = async () => {
+      const result = await chrome.storage.local.get('pageList');
+      const pagesVisited = result.pageList || [];
+      let domainTimeMap = {};
 
-        // Aggregate time by domain
-        pagesVisited.forEach((page) => {
+      console.log("pagesVisited", pagesVisited);
+      pagesVisited.forEach((domain) => {
+        console.log("domain", domain);
+        const { pages, domain: name } = domain;
+        let sumOfPages = 0;
 
-          const { domain, timeSpent } = page;
-          domainTimeMap[domain] = domainTimeMap[domain] || 0;
-
-          if (timeSpent) {
-            domainTimeMap[domain] += timeSpent;
-          }
-
+        (pages).forEach((page) => {
+          sumOfPages += page.timeSpent;
         });
 
-        console.log(domainTimeMap);
+        domain.timeSpent = sumOfPages;
+        domainTimeMap[name] = domain.timeSpent;
+      })
 
-        // Convert map to array for sorting
-        let sortedDomainsArray = Object.keys(domainTimeMap).map(
-          (domainName) => {
-            return { domainName, time: domainTimeMap[domainName] };
-          }
-        );
+      console.log("Time Spent by domain", domainTimeMap);
 
-        // Sorting based on the selected option
-        if (sortOption === 'topSpent') {
-          sortedDomainsArray.sort((a, b) => b.time - a.time);
-        } else if (sortOption === 'recentSpent') {
-          // For recentSpent, you need to have a lastVisited timestamp at domain level
-          // Assuming you have it, the sorting would be like:
-          // sortedDomainsArray.sort((a, b) => b.lastVisited - a.lastVisited);
+      // Convert map to array for sorting
+      let sortedDomainsArray = Object.keys(domainTimeMap).map(
+        (domainName) => {
+          return { domainName, time: domainTimeMap[domainName] };
         }
+      );
 
-        setSortedDomains(sortedDomainsArray);
-      });
-    };
+      // Sorting based on the selected option
+      if (sortOption === 'topSpent') {
+        sortedDomainsArray.sort((a, b) => b.time - a.time);
+      } else if (sortOption === 'recentSpent') {
+        // For recentSpent, you need to have a lastVisited timestamp at domain level
+        // Assuming you have it, the sorting would be like:
+        // sortedDomainsArray.sort((a, b) => b.lastVisited - a.lastVisited);
+      }
+      console.log("sortedDomainsArray", sortedDomainsArray);
+      setSortedDomains(sortedDomainsArray);
+    }
 
     loadData();
   }, [sortOption]);
@@ -101,14 +102,15 @@ const Listener = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedDomains.map(
+              {(sortedDomains).map(
                 (domain, index) =>
-                  index < 5 && (
-                    <tr key={index}>
-                      <td>{domain.domainName}</td>
-                      <td>{formatTime(domain.time)}</td>
-                    </tr>
-                  )
+                // index < 5 && 
+                (
+                  <tr key={index}>
+                    <td>{domain.domainName}</td>
+                    <td>{formatTime(domain.time * 1000)}</td>
+                  </tr>
+                )
               )}
             </tbody>
           </table>

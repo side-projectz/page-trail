@@ -13,13 +13,13 @@ import { Tabs } from "./chrome.interface";
 
 
 
-log.setLevel("warn");
+log.setLevel("debug");
 let tabsList: { [key: number]: Tabs } = {};
 let activeTab: Tabs | undefined = undefined;
 
 
 chrome.tabs.query({}, tabs => {
-    log.trace("query", tabs)
+    log.trace("[L1] query", tabs)
     tabs.forEach(tab => {
         const { active, id, status, url } = tab
 
@@ -56,7 +56,7 @@ chrome.tabs.query({}, tabs => {
 })
 
 chrome.tabs.onCreated.addListener(tab => {
-    log.trace("onCreated", tab)
+    log.trace("[L1] onCreated", tab)
     const { id, url } = tab
 
     if (!id || !url) {
@@ -81,7 +81,7 @@ chrome.tabs.onCreated.addListener(tab => {
 })
 
 chrome.tabs.onActivated.addListener(activeInfo => {
-    log.trace("onActivated", activeInfo)
+    log.trace("[L1] onActivated", activeInfo)
     const { tabId } = activeInfo
 
     if (!tabsList[tabId]) {
@@ -101,24 +101,17 @@ chrome.tabs.onActivated.addListener(activeInfo => {
 
     const tab = tabsList[tabId]
 
-    if (activeTab) {
-        tabsList[activeTab.id].isActive = false
-        tabsList[activeTab.id].timer.pause()
-        log.trace("previously activeTab", activeTab)
-        log.debug(activeTab.url, activeTab.timer.getTimeValues().seconds)
-    }
-
     if (tab) {
         tab.isActive = true
         tab.timer.start()
         activeTab = tab
         log.trace("current activeTab", activeTab);
-        log.debug( activeTab.url,  tab.timer.getTimeValues().seconds)
+        log.debug(activeTab.url, tab.timer.getTimeValues().seconds)
     }
 })
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    log.trace("onUpdated", tabId, changeInfo, tab)
+    log.trace("[L1] onUpdated", tabId, changeInfo, tab)
     const { url, status } = changeInfo
 
     // Initialize or update tab object in tabsList
@@ -169,7 +162,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    log.trace("onMessage", request, sender)
+    log.trace("[L1] onMessage", request, sender)
     if (request.action === "checkAuth") {
         authenticateUser((userInfo: any) => {
             sendResponse({ isAuthenticated: !!userInfo, user: userInfo })
@@ -179,59 +172,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Other message handling logic here...
 })
 
-chrome.windows.onFocusChanged.addListener(windowId => {
-    log.trace("onFocusChanged", windowId)
-    if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
-        log.trace("window unfocused")
-        tabsList[activeTab.id].isActive = false
-        tabsList[activeTab.id].timer.pause()
-        log.trace("previously activeTab", activeTab)
-    } else {
-        chrome.tabs.query({ active: true, windowId }, tabs => {
-            if (tabs.length === 0 || !tabs[0].id) {
-                return
-            }
-
-            if (tabs.length && tabs[0]?.id in tabsList) {
-                log.trace("window focused")
-                const tabId = tabs[0].id
-                tabsList[tabId].isActive = true
-                tabsList[tabId].timer.start()
-                activeTab = tabsList[tabId]
-                log.trace("current activeTab", activeTab)
-            }
-        })
-    }
-})
-
 chrome.runtime.onInstalled.addListener(details => {
-    log.trace("onInstalled", details)
+    log.trace("[L1] onInstalled", details)
     if (details.reason === "install" || details.reason === "update") {
         initializeAlarms()
     }
 })
 
 chrome.runtime.onStartup.addListener(() => {
-    log.trace("onStartup")
+    log.trace("[L1] onStartup")
     loadPageList()
 })
 
 chrome.alarms.onAlarm.addListener(alarm => {
-    log.trace("onAlarm", alarm)
+    log.trace("[L1] onAlarm", alarm)
     if (alarm.name === "syncData") {
         sendDataToServer()
     }
 })
 
 chrome.tabs.onRemoved.addListener(tabId => {
-    log.trace("onRemoved", tabId);
+    log.trace("[L1] onRemoved", tabId);
 
     if (!tabsList[tabId]) {
         return;
     }
 
     if (tabsList[tabId].isActive) {
-        tabsList[tabId].timer.stop();
+        tabsList[tabId].timer.pause();
     }
 
     const domain = transformTabsListForStorage({
@@ -239,13 +207,40 @@ chrome.tabs.onRemoved.addListener(tabId => {
     });
 
     // Store the updated data
+    log.debug("[L2] Removed domain", domain);
     storeData(domain);
     // Remove the tab from tabsList
     delete tabsList[tabId];
 });
 
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    log.trace("[L1] onFocusChanged", windowId)
+    if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
+        log.trace("window unfocused")
+        tabsList[activeTab.id].isActive = false
+        tabsList[activeTab.id].timer.pause()
+        log.trace("previously activeTab", activeTab)
+    } else {
+        const tabs = await chrome.tabs.query({ active: true, windowId });
+        log.trace("onFocusChanged query", tabs)
+        if (tabs.length === 0 || !tabs[0].id) {
+            return
+        }
+
+        if (tabs.length && tabs[0]?.id in tabsList) {
+            log.trace("window focused")
+            const tabId = tabs[0].id
+            tabsList[tabId].isActive = true
+            tabsList[tabId].timer.start()
+            activeTab = tabsList[tabId]
+            log.trace("current activeTab", activeTab)
+
+        }
+    }
+})
+
 chrome.windows.onRemoved.addListener(windowId => {
-    log.trace("onRemoved", windowId);
+    log.trace("[L1] onRemoved", windowId);
     chrome.tabs.query({ windowId }, tabs => {
         tabs.forEach(tab => {
             const { id } = tab;
@@ -258,13 +253,14 @@ chrome.windows.onRemoved.addListener(windowId => {
             }
 
             if (tabsList[id].isActive) {
-                tabsList[id].timer.stop();
+                tabsList[id].timer.pause();
             }
 
             const domain = transformTabsListForStorage({
                 [id]: tabsList[id]
             });
 
+            log.debug("domain", domain);
             // Store the updated data
             storeData(domain);
             // Remove the tab from tabsList

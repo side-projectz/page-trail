@@ -25,6 +25,6 @@ module.exports = {
     path: (__dirname + '/dist')
   },
   optimization: {
-    minimize: true // This disables the minification
+    minimize: false // This disables the minification
   }
 }
