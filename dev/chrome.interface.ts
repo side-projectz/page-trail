@@ -12,6 +12,10 @@ export interface Tabs {
   timer: Timer;
   domain?: string;
   openedAt: number;
+  meta?: {
+    title: string;
+    description: string;
+  };
 }
 
 export interface Page {

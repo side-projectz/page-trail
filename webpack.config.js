@@ -2,7 +2,10 @@ const path = require('path');
 
 module.exports = {
   mode: "production",
-  entry: './dev/background.ts',
+  entry: { 
+    background: './dev/background.ts',
+    contentScript: './dev/contentScript.ts',
+   },
   module: {
     rules: [
       {
@@ -21,7 +24,7 @@ module.exports = {
     extensions: ['.ts', '.js'],
   },
   output: {
-    filename: 'background.js',
+    filename: '[name].js',
     path: (__dirname + '/dist')
   },
   optimization: {

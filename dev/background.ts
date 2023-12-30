@@ -140,8 +140,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
         updatedTab.url !== tab.url
     ) {
         log.debug("url Changed", updatedTab.url, tab.url)
-        log.debug("url Changed - [" + tabId + "]", JSON.stringify(updatedTab)) ;
-        log.debug("url Changed - [timeSpent]", updatedTab.timer.getTimeValues().seconds) ;
+        log.debug("url Changed - [" + tabId + "]", JSON.stringify(updatedTab));
+        log.debug("url Changed - [timeSpent]", updatedTab.timer.getTimeValues().seconds);
 
         storeData(transformTabsListForStorage({
             [tabId]: updatedTab
@@ -154,9 +154,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 
     if (status === "completed" && tab.url && tab.url !== "") {
-        // if(activeTab?.id ===tabId ){
-        // }
-
         if (activeTab && activeTab.url !== tab.url) {
             log.debug("url changed", activeTab.url, tab.url)
             activeTab.url = tab.url
