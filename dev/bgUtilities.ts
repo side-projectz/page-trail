@@ -13,7 +13,7 @@ const exclusionRules: {
 };
 
 export function urlIsExcluded(url: string) {
-    return url === '' ||
+    return url.trim() === '' ||
         exclusionRules.urlPatterns.some((pattern) => url.startsWith(pattern)) ||
         exclusionRules.domains.some((domain) => new URL(url).hostname.includes(domain));
 }
@@ -138,7 +138,7 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
     const transformedData: Domain[] = [];
 
     Object.values(tabsList).forEach((tab: Tabs) => {
-        if(!tab.url) {
+        if (!tab.url) {
             return;
         }
         const domainKey = tab.domain || getMainDomain(tab.url);
