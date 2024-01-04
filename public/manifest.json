@@ -1,8 +1,8 @@
 {
   "name": "PageTrail",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "This Extension tracks your daily surfing activity",
-  "permissions": ["storage","tabs", "alarms", "identity", "activeTab"],
+  "permissions": ["storage","tabs", "alarms", "identity"],
   "background": {
     "service_worker": "background.js"
   },
