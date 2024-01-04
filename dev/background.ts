@@ -279,11 +279,16 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     }
 })
 
-
-chrome.alarms.onAlarm.addListener(alarm => {
+chrome.alarms.onAlarm.addListener((alarm) => {
     log.debug("[L1] onAlarm", alarm)
     if (alarm.name === "syncData") {
-        sendDataToServer()
+        sendDataToServer();
+        return;
+    }
+
+    if (alarm.name === "dailyReset") {
+        // chrome.storage.local.clear();
+        return;
     }
 })
 
@@ -306,6 +311,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({ isAuthenticated: !!userInfo, user: userInfo })
         })
         return true
+    }
+
+    if (request.action === "syncData") {
+        sendDataToServer()
+            .then(() => {
+                log.debug("syncData: success");
+                sendResponse({ success: true })
+            });
+        return true;
     }
     // Other message handling logic here...
 })

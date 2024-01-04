@@ -2,7 +2,7 @@ import { Tabs, Domain, Page } from "./chrome.interface";
 import log from 'loglevel';
 import deepmerge from "deepmerge";
 
-log.setLevel("warn");
+log.setLevel("error");
 
 const exclusionRules: {
     urlPatterns: string[];
@@ -69,10 +69,10 @@ export function authenticateUser(callback: (userInfo: { email: string; name: str
         }
         fetch(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`)
             .then((response) => response.json())
-            .then((userInfo) => {
-                callback(userInfo);
-                chrome.storage.local.set({ user_email: userInfo.email });
+            .then(async (userInfo) => {
+                await chrome.storage.local.set({ user_email: userInfo.email });
                 log.debug('User authenticated:', userInfo);
+                callback(userInfo);
             })
             .catch((error) => {
                 log.error('Authentication error:', error);
@@ -92,8 +92,11 @@ export async function sendDataToServer() {
         const { user_email } = await chrome.storage.local.get(['user_email']);
         const { pageList } = await chrome.storage.local.get(['pageList']);
 
+        console.log('user_email', user_email);
+        console.log('pageList', pageList);
+
         const requestBody = {
-            email: user_email.email,
+            email: user_email,
             data: pageList,
             date,
         }
