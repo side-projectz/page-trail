@@ -19,12 +19,14 @@ export default function Home() {
       }
 
       chrome.runtime.sendMessage({ action: 'checkAuth' }, async (response) => {
+        console.log('checkAuth response', response)
         setStatus('check auth response');
         setStatus(
           response.isAuthenticated ? 'authenticated' : 'not authenticated'
         );
         if (response.isAuthenticated) {
           const user = response.user
+          await chrome.storage.local.set({ user_email: user.email });
           setUser(user);
           setIsTrackingEnabled(true);
           setStatus('authenticated');
@@ -53,9 +55,9 @@ export default function Home() {
 
   return (
     <>
-      Signed in as {user.email} <br />
+      {/* Signed in as {user.email} <br /> */}
+      {!isTrackingEnabled && <div>Authorization...</div>}
       {isTrackingEnabled && <Listener />}
-      {!isTrackingEnabled && <div>Waiting for tracking authorization...</div>}
     </>
   );
 }

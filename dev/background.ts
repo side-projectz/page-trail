@@ -1,305 +1,184 @@
-import { Timer } from "easytimer.js";
-import {
-    authenticateUser,
-    getMainDomain,
-    loadPageList,
-    sendDataToServer,
-    storeData,
-    transformTabsListForStorage,
-    urlIsExcluded
-} from "./bgUtilities";
-import log from "loglevel";
+import { Timer } from "easytimer.js"
+import { urlIsExcluded, authenticateUser, getMainDomain, storeData, sendDataToServer, loadPageList } from "./bgUtilities";
 import { Tabs } from "./chrome.interface";
+import log from "loglevel";
+log.setLevel("error");
 
 
+const activeTab: Tabs = {
+    id: 0,
+    url: undefined,
+    timer: new Timer(),
+    isActive: false,
+    openedAt: 0,
+    domain: undefined,
+    meta: {
+        title: '',
+        description: '',
+    }
+}
 
-log.setLevel("warn");
-let tabsList: { [key: number]: Tabs } = {};
-let activeTab: Tabs | undefined = undefined;
-
-
-chrome.tabs.query({}, tabs => {
-    log.debug("[L1] query", tabs)
-    tabs.forEach(tab => {
-        const { active, id, status, url } = tab
-
-        if (!id || !url) {
-            return
-        }
-
-        if (!urlIsExcluded(url)) {
-            const obj: Tabs = {
-                id,
-                url,
-                isActive: active,
-                timer: new Timer({
-                    startValues: { seconds: 0 },
-                    precision: "seconds",
-                    countdown: false
-                }),
-                openedAt: new Date().getTime()
-            }
-
-            if (status === "complete" && url && url !== "") {
-                obj.domain = getMainDomain(url)
-            }
-
-            if (active) {
-                obj.isActive = true
-                obj.timer.start()
-            }
-
-            tabsList[id] = obj
-            activeTab = obj
-        }
-    })
-})
-
-chrome.tabs.onCreated.addListener(tab => {
-    log.debug("[L1] onCreated", tab)
-    const { id, url } = tab
-
-    if (!id || !url) {
+chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    log.debug('Query: runs on startup - tabs', tabs)
+    if (tabs.length === 0 || !tabs[0].id) {
         return
     }
 
-    if (!urlIsExcluded(url)) {
-        const obj: Tabs = {
-            id,
-            url,
-            isActive: false,
-            timer: new Timer({
-                startValues: { seconds: 0 },
-                precision: "seconds",
-                countdown: false
-            }),
-            openedAt: new Date().getTime()
+    if (tabs[0].status === "complete") {
+
+        if (!urlIsExcluded(tabs[0].url || '')) {
+
+            const domain = getMainDomain(tabs[0].url!);
+            if (tabs[0].id && activeTab.id !== tabs[0].id) {
+                log.debug('setting active tab on startup')
+
+                activeTab.id = tabs[0].id;
+                activeTab.url = tabs[0].url;
+                activeTab.timer.start();
+                activeTab.isActive = true;
+                activeTab.openedAt = new Date().getTime();
+                activeTab.domain = domain;
+                activeTab.meta = {
+                    title: tabs[0].title || '',
+                    description: '',
+                }
+            }
         }
 
-        tabsList[id] = obj
     }
 })
 
-chrome.tabs.onActivated.addListener(activeInfo => {
-    log.debug("[L1] onActivated", activeInfo)
-    const { tabId } = activeInfo
+chrome.tabs.onActivated.addListener((tab) => {
+    const { tabId, windowId } = tab;
 
-    if (!tabsList[tabId]) {
-        const obj: Tabs = {
-            id: tabId,
-            url: undefined,
-            isActive: false,
-            timer: new Timer({
-                startValues: { seconds: 0 },
-                precision: "seconds",
-                countdown: false
-            }),
-            openedAt: new Date().getTime()
+    if (activeTab.url) {
+
+        const page = {
+            openedAt: activeTab.openedAt,
+            page: activeTab.url,
+            timeSpent: activeTab.timer.getTimeValues().seconds,
+            domain: activeTab.domain || getMainDomain(activeTab.url),
+            meta: {
+                title: '',
+                description: '',
+            },
+            lastVisited: new Date().getTime()
         }
-        tabsList[tabId] = obj
+
+        activeTab.timer.stop();
+        activeTab.isActive = false;
+
+        log.warn("storing Data:", {
+            domain: page.domain,
+            pages: [page]
+        })
+
+
+        storeData([{
+            domain: page.domain,
+            pages: [page]
+        }]);
+
+
     }
 
-    const tab = tabsList[tabId]
 
-    if (tab) {
-        tab.isActive = true
-        tab.timer.start()
-        activeTab = tab
-        log.debug("current activeTab", activeTab);
-        log.debug(activeTab.url, tab.timer.getTimeValues().seconds)
+    if (tabId && windowId) {
+        chrome.tabs.get(tabId, (tab) => {
+            try {
+
+                if (tab.status === 'complete' && !urlIsExcluded(tab.url || '')) {
+                    const domain = getMainDomain(tab.url!);
+
+                    activeTab.id = tabId;
+                    activeTab.url = tab.url;
+                    activeTab.timer.start();
+                    activeTab.isActive = true;
+                    activeTab.openedAt = new Date().getTime();
+                    activeTab.domain = domain;
+                    activeTab.meta = {
+                        title: tab.title || '',
+                        description: '',
+                    }
+
+                }
+            } catch (error) {
+                log.error('Error onActivated', error)
+            }
+        })
     }
-})
+});
+
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-    log.debug("[L1] onUpdated - tabId", tabId)
-    log.debug("[L1] onUpdated - changeInfo", JSON.stringify(changeInfo, null, 2))
-    log.debug("[L1] onUpdated - tab", JSON.stringify(tab, null, 2))
+    try {
+        if (changeInfo.status === 'loading') {
+            if (activeTab.url) {
 
-    const { status } = changeInfo
-    // Initialize or update tab object in tabsList
-    if (!tabsList[tabId]) {
-        tabsList[tabId] = {
-            id: tabId,
-            url: tab.url || undefined,
-            isActive: false,
-            timer: new Timer({
-                startValues: { seconds: 0 },
-                precision: "seconds",
-                countdown: false
-            }),
-            openedAt: new Date().getTime()
-        }
-    }
+                const page = {
+                    openedAt: activeTab.openedAt,
+                    page: activeTab.url,
+                    timeSpent: activeTab.timer.getTimeValues().seconds,
+                    domain: activeTab.domain || getMainDomain(activeTab.url),
+                    meta: {
+                        title: '',
+                        description: '',
+                    },
+                    lastVisited: new Date().getTime()
+                }
 
-    const updatedTab = tabsList[tabId];
-    log.debug("old tab details", JSON.stringify(updatedTab, null, 2))
+                activeTab.timer.stop();
+                activeTab.isActive = false;
 
-    if (
-        changeInfo.status === 'loading' &&
-        tab.status === 'loading' &&
-        updatedTab.url !== tab.url
-    ) {
-        log.debug("url Changed", updatedTab.url, tab.url)
-        log.debug("url Changed - [" + tabId + "]", JSON.stringify(updatedTab));
-        log.debug("url Changed - [timeSpent]", updatedTab.timer.getTimeValues().seconds);
+                log.warn("storing Data:", {
+                    domain: page.domain,
+                    pages: [page]
+                })
 
-        storeData(transformTabsListForStorage({
-            [tabId]: updatedTab
-        }))
-        updatedTab.timer.stop();
-    }
-
-
-    updatedTab.url = tab.url || updatedTab.url
-
-
-    if (status === "completed" && tab.url && tab.url !== "") {
-        if (activeTab && activeTab.url !== tab.url) {
-            log.debug("url changed", activeTab.url, tab.url)
-            activeTab.url = tab.url
-        }
-
-    }
-
-    // Check if tab has finished loading
-    if (status === "complete" && tab.url && tab.url !== "") {
-        updatedTab.domain = getMainDomain(tab.url)
-
-        // Handle based on whether tab is active or in background
-        if (tab.active) {
-            // Active tab completed loading
-            if (activeTab && activeTab.id !== tabId) {
-                log.debug("previously activeTab", activeTab);
-                tabsList[activeTab.id].isActive = false
-                tabsList[activeTab.id].timer.pause()
+                storeData([{
+                    domain: page.domain,
+                    pages: [page]
+                }]);
             }
-            updatedTab.isActive = true
-            updatedTab.timer.start()
-            activeTab = updatedTab
-            log.debug("current activeTab", activeTab)
-        } else {
-            // Background tab completed loading
-            updatedTab.isActive = false
-            updatedTab.timer.pause()
+
+            // resetting active tab
+            activeTab.id = 0;
+            activeTab.url = undefined;
+            activeTab.timer.stop();
+            activeTab.isActive = false;
+            activeTab.openedAt = 0;
+            activeTab.domain = undefined;
+            activeTab.meta = {
+                title: '',
+                description: '',
+            }
         }
+
+        if (changeInfo.status === "complete") {
+
+            if (tab.url && !urlIsExcluded(tab.url)) {
+                const domain = getMainDomain(tab.url);
+                log.debug('onUpdated: when switched to a new tab')
+                activeTab.id = tabId;
+                activeTab.url = tab.url;
+                activeTab.timer.start();
+                activeTab.isActive = true;
+                activeTab.openedAt = new Date().getTime();
+                activeTab.domain = domain;
+                activeTab.meta = {
+                    title: tab.title || '',
+                    description: '',
+                }
+            }
+
+        }
+
+    } catch (e) {
+        log.error('Error onUpdated', e)
     }
 
-    // Update the tabsList
-    if (status === 'complete')
-        tabsList[tabId] = updatedTab;
-
-    log.debug("updated tab details", JSON.stringify(updatedTab, null, 2));
-    log.debug(" onUpdated End ============================================");
-})
-
-
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    log.debug("[L1] onMessage", request, sender)
-    if (request.action === "checkAuth") {
-        authenticateUser((userInfo: any) => {
-            sendResponse({ isAuthenticated: !!userInfo, user: userInfo })
-        })
-        return true
-    }
-    // Other message handling logic here...
-})
-
-chrome.runtime.onInstalled.addListener(details => {
-    log.debug("[L1] onInstalled", details)
-    if (details.reason === "install" || details.reason === "update") {
-        initializeAlarms()
-    }
-})
-
-chrome.runtime.onStartup.addListener(() => {
-    log.debug("[L1] onStartup")
-    loadPageList()
-})
-
-chrome.alarms.onAlarm.addListener(alarm => {
-    log.debug("[L1] onAlarm", alarm)
-    if (alarm.name === "syncData") {
-        sendDataToServer()
-    }
-})
-
-chrome.tabs.onRemoved.addListener(tabId => {
-    log.debug("[L1] onRemoved", tabId);
-
-    if (!tabsList[tabId]) {
-        return;
-    }
-
-    if (tabsList[tabId].isActive) {
-        tabsList[tabId].timer.pause();
-    }
-
-    const domain = transformTabsListForStorage({
-        [tabId]: tabsList[tabId]
-    });
-
-    // Store the updated data
-    log.debug("[L2] Removed domain", domain);
-    storeData(domain);
-    // Remove the tab from tabsList
-    delete tabsList[tabId];
 });
 
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-    // log.debug("[L1] onFocusChanged", windowId)
-    if (windowId === chrome.windows.WINDOW_ID_NONE && activeTab) {
-        // log.debug("window unfocused")
-        tabsList[activeTab.id].isActive = false
-        tabsList[activeTab.id].timer.pause()
-        // log.debug("previously activeTab", activeTab)
-    } else {
-        const tabs = await chrome.tabs.query({ active: true, windowId });
-        // log.debug("onFocusChanged query", tabs)
-        if (tabs.length === 0 || !tabs[0].id) {
-            return
-        }
-
-        if (tabs.length && tabs[0]?.id in tabsList) {
-            // log.debug("window focused")
-            const tabId = tabs[0].id
-            tabsList[tabId].isActive = true
-            tabsList[tabId].timer.start()
-            activeTab = tabsList[tabId]
-            // log.debug("current activeTab", activeTab)
-        }
-    }
-})
-
-chrome.windows.onRemoved.addListener(windowId => {
-    log.debug("[L1] onRemoved", windowId);
-    chrome.tabs.query({ windowId }, tabs => {
-        tabs.forEach(tab => {
-            const { id } = tab;
-            if (!id) {
-                return;
-            }
-
-            if (!tabsList[id]) {
-                return;
-            }
-
-            if (tabsList[id].isActive) {
-                tabsList[id].timer.pause();
-            }
-
-            const domain = transformTabsListForStorage({
-                [id]: tabsList[id]
-            });
-
-            log.debug("domain", domain);
-            // Store the updated data
-            storeData(domain);
-            // Remove the tab from tabsList
-            delete tabsList[id];
-        });
-    });
-});
 
 function initializeAlarms() {
     chrome.alarms.create("syncData", { periodInMinutes: 120 })
@@ -319,5 +198,128 @@ function initializeAlarms() {
 }
 
 initializeAlarms()
-loadPageList()
-// setInterval(() => storeData(tabsList), 60000)
+
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    log.debug("[L1] onFocusChanged", windowId)
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+        // log.debug("window unfocused")
+        activeTab.timer.pause();
+        activeTab.isActive = false;
+
+        log.debug("previously activeTab", activeTab, { timeSpent: activeTab.timer.getTimeValues().seconds })
+
+        if (activeTab.url && !urlIsExcluded(activeTab.url)) {
+
+            const page = {
+                openedAt: activeTab.openedAt,
+                page: activeTab.url,
+                timeSpent: activeTab.timer.getTimeValues().seconds,
+                domain: activeTab.domain || getMainDomain(activeTab.url),
+                meta: {
+                    title: '',
+                    description: '',
+                },
+                lastVisited: new Date().getTime()
+            }
+            activeTab.timer.stop();
+            activeTab.isActive = false;
+
+            // storing data 
+            log.warn("storing Data: when window is unfocused ", {
+                domain: page.domain,
+                pages: [page]
+            })
+
+            storeData([{
+                domain: page.domain,
+                pages: [page]
+            }]);
+        }
+
+        // resetting active tab
+        activeTab.id = 0;
+        activeTab.url = undefined;
+        activeTab.timer.stop();
+        activeTab.isActive = false;
+        activeTab.openedAt = 0;
+        activeTab.domain = undefined;
+        activeTab.meta = {
+            title: '',
+            description: '',
+        }
+
+
+    } else {
+        const tabs = await chrome.tabs.query({ active: true, windowId });
+        log.debug("onFocusChanged query", tabs)
+
+        if (tabs[0].status === "complete") {
+            if (tabs[0].url && tabs[0].url !== '') {
+                if (!urlIsExcluded(tabs[0].url)) {
+
+                    const domain = getMainDomain(tabs[0].url);
+                    if (tabs[0].id && activeTab.id !== tabs[0].id) {
+                        log.debug('onFocusChanged: when switched to a new tab')
+
+                        activeTab.id = tabs[0].id;
+                        activeTab.url = tabs[0].url;
+                        activeTab.timer.start();
+                        activeTab.isActive = true;
+                        activeTab.openedAt = new Date().getTime();
+                        activeTab.domain = domain;
+                        activeTab.meta = {
+                            title: tabs[0].title || '',
+                            description: '',
+                        }
+                    }
+
+                }
+            }
+        }
+    }
+})
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    log.debug("[L1] onAlarm", alarm)
+    if (alarm.name === "syncData") {
+        sendDataToServer();
+        return;
+    }
+
+    if (alarm.name === "dailyReset") {
+        // chrome.storage.local.clear();
+        return;
+    }
+})
+
+chrome.runtime.onStartup.addListener(() => {
+    log.debug("[L1] onStartup")
+    loadPageList()
+})
+
+chrome.runtime.onInstalled.addListener(details => {
+    log.debug("[L1] onInstalled", details)
+    if (details.reason === "install" || details.reason === "update") {
+        initializeAlarms()
+    }
+})
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    log.debug("[L1] onMessage", request, sender)
+    if (request.action === "checkAuth") {
+        authenticateUser((userInfo: any) => {
+            sendResponse({ isAuthenticated: !!userInfo, user: userInfo })
+        })
+        return true
+    }
+
+    if (request.action === "syncData") {
+        sendDataToServer()
+            .then(() => {
+                log.debug("syncData: success");
+                sendResponse({ success: true })
+            });
+        return true;
+    }
+    // Other message handling logic here...
+})
