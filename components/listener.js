@@ -21,15 +21,28 @@ const Listener = () => {
   const [sortOption, setSortOption] = useState('topSpent');
   const [sortedDomains, setSortedDomains] = useState([]);
 
+
+  // const syncData = () => {
+  //   try {
+  //     // console.log("syncData");
+  //     chrome.runtime.sendMessage({ action: 'syncData' }, async (response) => {
+  //       console.log("syncData success");
+  //     });
+  //   } catch (error) {
+  //     console.log("syncData error", error);
+  //   }
+  // }
+
+
   useEffect(() => {
     const loadData = async () => {
       const result = await chrome.storage.local.get('pageList');
       const pagesVisited = result.pageList || [];
       let domainTimeMap = {};
 
-      console.log("pagesVisited", pagesVisited);
+      // console.log("pagesVisited", pagesVisited);
       pagesVisited.forEach((domain) => {
-        console.log("domain", domain);
+        // console.log("domain", domain);
         const { pages, domain: name } = domain;
         let sumOfPages = 0;
 
@@ -41,7 +54,7 @@ const Listener = () => {
         domainTimeMap[name] = domain.timeSpent;
       })
 
-      console.log("Time Spent by domain", domainTimeMap);
+      // console.log("Time Spent by domain", domainTimeMap);
 
       // Convert map to array for sorting
       let sortedDomainsArray = Object.keys(domainTimeMap).map(
@@ -58,7 +71,7 @@ const Listener = () => {
         // Assuming you have it, the sorting would be like:
         // sortedDomainsArray.sort((a, b) => b.lastVisited - a.lastVisited);
       }
-      console.log("sortedDomainsArray", sortedDomainsArray);
+      // console.log("sortedDomainsArray", sortedDomainsArray);
       setSortedDomains(sortedDomainsArray);
     }
 
@@ -82,16 +95,26 @@ const Listener = () => {
       </Head>
 
       <div>
-        <h1>PageTrail</h1>
 
-        <label htmlFor='sortOptions'>Sort by:</label>
-        <select
-          id='sortOptions'
-          onChange={(e) => setSortOption(e.target.value)}
-        >
-          <option value='topSpent'>Top Spent</option>
-          <option value='recentSpent'>Recent Spent</option>
-        </select>
+        <nav>
+          <ul>
+            <li><h1>PageTrail</h1></li>
+          </ul>
+          <ul>
+            {/* <li><a href="#" role="button" onClick={syncData}>Sync now</a></li> */}
+          </ul>
+        </nav>
+
+        {/* <div>
+          <label htmlFor='sortOptions'>Sort by:</label>
+          <select
+            id='sortOptions'
+            onChange={(e) => setSortOption(e.target.value)}
+          >
+            <option value='topSpent'>Top Spent</option>
+            <option value='recentSpent'>Recent Spent</option>
+          </select>
+        </div> */}
 
         <div>
           <table>
@@ -104,13 +127,13 @@ const Listener = () => {
             <tbody>
               {(sortedDomains).map(
                 (domain, index) =>
-                index < 5 && 
-                (
-                  <tr key={index}>
-                    <td>{domain.domainName}</td>
-                    <td>{formatTime(domain.time * 1000)}</td>
-                  </tr>
-                )
+                  index < 10 &&
+                  (
+                    <tr key={index}>
+                      <td>{domain.domainName}</td>
+                      <td>{formatTime(domain.time * 1000)}</td>
+                    </tr>
+                  )
               )}
             </tbody>
           </table>
