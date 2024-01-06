@@ -29,4 +29,5 @@ export interface Page {
     tags?: string[];
   };
   lastVisited: number;
+  synced: boolean;
 }

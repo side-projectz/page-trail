@@ -2,7 +2,7 @@ import { Tabs, Domain, Page } from "./chrome.interface";
 import log from 'loglevel';
 import deepmerge from "deepmerge";
 
-log.setLevel("error");
+log.setLevel("warn");
 
 const exclusionRules: {
     urlPatterns: string[];
@@ -37,17 +37,34 @@ export function storeData(removedPages: Domain[]) {
 
     log.debug('Storing data:', removedPages);
     chrome.storage.local.get(['pageList'], async (result) => {
+
+        if (result.pageList === undefined) {
+            log.debug('No data found in storage. Creating new data...');
+            await chrome.storage.local.set({ pageList: [] });
+            return true;
+        }
+
         if (chrome.runtime.lastError) {
             log.error('Error storing data:', chrome.runtime.lastError.message);
         } else {
 
             const pageList: Domain[] = result.pageList || [];
 
-            const mergedData = customDeepMerger(pageList, removedPages);
+            const domainIndex = pageList.findIndex(item => item.domain === removedPages[0].domain);
+            log.debug('domainIndex', domainIndex);
 
-            log.debug('Merged data:', mergedData);
+            if (domainIndex === -1) {
+                log.debug('Domain not found. Creating new domain...');
+                pageList.push(removedPages[0]);
+                await chrome.storage.local.set({ pageList: pageList });
+                return true;
+            }
 
-            chrome.storage.local.set({ pageList: mergedData }).then(() => {
+            pageList[domainIndex].pages = [...(pageList[domainIndex].pages || []), ...removedPages[0].pages];
+
+            log.debug('Merged data:', pageList);
+
+            chrome.storage.local.set({ pageList: pageList }).then(() => {
                 log.info('Data stored successfully');
             }).catch((error) => {
                 log.error('Error storing data:', error);
@@ -92,12 +109,19 @@ export async function sendDataToServer() {
         const { user_email } = await chrome.storage.local.get(['user_email']);
         const { pageList } = await chrome.storage.local.get(['pageList']);
 
-        console.log('user_email', user_email);
-        console.log('pageList', pageList);
+        log.debug('user_email', user_email);
+        log.debug('pageList', pageList);
+
+        const unSyncedData = (pageList as Domain[] || []).map((domain: Domain) => {
+            return {
+                domain: domain.domain,
+                pages: domain.pages.filter((page: Page) => !page.synced)
+            }
+        }).filter((domain: Domain) => domain.pages.length > 0);
 
         const requestBody = {
             email: user_email,
-            data: pageList,
+            data: unSyncedData,
             date,
         }
 
@@ -112,15 +136,21 @@ export async function sendDataToServer() {
         })
 
         log.debug('Data sent successfully:', await response.json());
-        // await updateLastSyncTime();
-
-        // Implement your data synchronization logic here
         log.debug('Data synchronized to the server.');
-        // saveData();
+
+        pageList.forEach((domain: Domain) => {
+            domain.pages.forEach((page: Page) => {
+                page.synced = true;
+            })
+        })
+
+        await chrome.storage.local.set({ pageList: pageList });
+        await chrome.storage.local.set({ lastSynced: new Date().toISOString() });
+        log.debug('updated pageList after sync');
+
     } catch (error) {
         log.error('Error sending data to server:', error);
     }
-
 }
 
 export async function loadPageList() {
@@ -163,11 +193,12 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
                     title: '',
                     description: '',
                 },
-                lastVisited: new Date().getTime()
+                lastVisited: new Date().getTime(),
+                synced: false
             }
             existingDomain.pages.push(page);
         } else {
-            const page = {
+            const page: Page = {
                 openedAt: tab.openedAt,
                 page: tab.url || '',
                 timeSpent: tab.timer.getTimeValues().seconds,
@@ -176,7 +207,8 @@ export function transformTabsListForStorage(tabsList: { [key: number]: Tabs }): 
                     title: '',
                     description: '',
                 },
-                lastVisited: new Date().getTime()
+                lastVisited: new Date().getTime(),
+                synced: false
             }
             const domain = {
                 domain: domainKey,

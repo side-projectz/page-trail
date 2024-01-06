@@ -1,8 +1,9 @@
 import { Timer } from "easytimer.js"
 import { urlIsExcluded, authenticateUser, getMainDomain, storeData, sendDataToServer, loadPageList } from "./bgUtilities";
-import { Tabs } from "./chrome.interface";
+import { Page, Tabs } from "./chrome.interface";
 import log from "loglevel";
-log.setLevel("error");
+
+log.setLevel("warn");
 
 
 const activeTab: Tabs = {
@@ -15,8 +16,39 @@ const activeTab: Tabs = {
     meta: {
         title: '',
         description: '',
-    }
+    },
 }
+
+chrome.storage.local.get(['pageList'], (result) => {
+    log.debug('Query: runs on startup - local.get - pageList', result)
+    let { pageList } = result;
+    if (pageList) {
+        for (let page of pageList) {
+            if (!page.timeSpent || isNaN(page.timeSpent)) {
+                page.timeSpent = 0;  // Set a default value
+            }
+        }
+    }else{
+        chrome.storage.local.set({ pageList: [] });
+        pageList = [];
+    }
+    log.debug('Page list loaded:', pageList);
+    return pageList;
+})
+
+chrome.storage.local.get(['lastSynced'], (result) => {
+    log.debug('Query: runs on startup - local.get - lastSynced', result)
+    const { lastSynced } = result;
+
+    const now = new Date().getTime();
+    const lastSyncedDate = new Date(lastSynced || 0).getTime();
+
+    // if last synced is more than 2 hours ago, sync data
+    if (!lastSynced || now - lastSyncedDate > 7200000) {
+        console.log("syncing data on startup")
+        sendDataToServer();
+    }
+});
 
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     log.debug('Query: runs on startup - tabs', tabs)
@@ -53,7 +85,7 @@ chrome.tabs.onActivated.addListener((tab) => {
 
     if (activeTab.url) {
 
-        const page = {
+        const page: Page = {
             openedAt: activeTab.openedAt,
             page: activeTab.url,
             timeSpent: activeTab.timer.getTimeValues().seconds,
@@ -62,7 +94,8 @@ chrome.tabs.onActivated.addListener((tab) => {
                 title: '',
                 description: '',
             },
-            lastVisited: new Date().getTime()
+            lastVisited: new Date().getTime(),
+            synced: false
         }
 
         activeTab.timer.stop();
@@ -78,7 +111,6 @@ chrome.tabs.onActivated.addListener((tab) => {
             domain: page.domain,
             pages: [page]
         }]);
-
 
     }
 
@@ -109,13 +141,12 @@ chrome.tabs.onActivated.addListener((tab) => {
     }
 });
 
-
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     try {
         if (changeInfo.status === 'loading') {
             if (activeTab.url) {
 
-                const page = {
+                const page: Page = {
                     openedAt: activeTab.openedAt,
                     page: activeTab.url,
                     timeSpent: activeTab.timer.getTimeValues().seconds,
@@ -124,7 +155,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
                         title: '',
                         description: '',
                     },
-                    lastVisited: new Date().getTime()
+                    lastVisited: new Date().getTime(),
+                    synced: false
                 }
 
                 activeTab.timer.stop();
@@ -179,26 +211,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 });
 
-
-function initializeAlarms() {
-    chrome.alarms.create("syncData", { periodInMinutes: 120 })
-    let now = new Date()
-    let nextMidnight = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() + 1,
-        0,
-        1,
-        0
-    )
-    let delayInMinutes = Math.round(
-        (nextMidnight.getTime() - now.getTime()) / 60000
-    )
-    chrome.alarms.create("dailyReset", { delayInMinutes, periodInMinutes: 1440 })
-}
-
-initializeAlarms()
-
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
     log.debug("[L1] onFocusChanged", windowId)
     if (windowId === chrome.windows.WINDOW_ID_NONE) {
@@ -210,7 +222,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 
         if (activeTab.url && !urlIsExcluded(activeTab.url)) {
 
-            const page = {
+            const page: Page = {
                 openedAt: activeTab.openedAt,
                 page: activeTab.url,
                 timeSpent: activeTab.timer.getTimeValues().seconds,
@@ -219,7 +231,8 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
                     title: '',
                     description: '',
                 },
-                lastVisited: new Date().getTime()
+                lastVisited: new Date().getTime(),
+                synced: false
             }
             activeTab.timer.stop();
             activeTab.isActive = false;
@@ -279,6 +292,26 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     }
 })
 
+
+function initializeAlarms() {
+    chrome.alarms.create("syncData", { periodInMinutes: 30 })
+    let now = new Date()
+    let nextMidnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        0,
+        1,
+        0
+    )
+    let delayInMinutes = Math.round(
+        (nextMidnight.getTime() - now.getTime()) / 60000
+    )
+    chrome.alarms.create("dailyReset", { delayInMinutes, periodInMinutes: 1440 })
+}
+
+initializeAlarms()
+
 chrome.alarms.onAlarm.addListener((alarm) => {
     log.debug("[L1] onAlarm", alarm)
     if (alarm.name === "syncData") {
@@ -292,8 +325,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 })
 
-chrome.runtime.onStartup.addListener(() => {
-    log.debug("[L1] onStartup")
+chrome.runtime.onStartup.addListener(async () => {
+    log.debug("[L1] onStartup");
     loadPageList()
 })
 
