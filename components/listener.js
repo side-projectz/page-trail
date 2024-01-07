@@ -22,16 +22,16 @@ const Listener = () => {
   const [sortedDomains, setSortedDomains] = useState([]);
 
 
-  // const syncData = () => {
-  //   try {
-  //     // console.log("syncData");
-  //     chrome.runtime.sendMessage({ action: 'syncData' }, async (response) => {
-  //       console.log("syncData success");
-  //     });
-  //   } catch (error) {
-  //     console.log("syncData error", error);
-  //   }
-  // }
+  const syncData = () => {
+    try {
+      // console.log("syncData");
+      chrome.runtime.sendMessage({ action: 'syncData' }, async (response) => {
+        console.log("syncData success");
+      });
+    } catch (error) {
+      console.log("syncData error", error);
+    }
+  }
 
 
   useEffect(() => {
@@ -100,9 +100,9 @@ const Listener = () => {
           <ul>
             <li><h1>PageTrail</h1></li>
           </ul>
-          <ul>
-            {/* <li><a href="#" role="button" onClick={syncData}>Sync now</a></li> */}
-          </ul>
+          {/* <ul>
+            <li><a href="#" role="button" onClick={syncData}>Sync now</a></li>
+          </ul> */}
         </nav>
 
         {/* <div>

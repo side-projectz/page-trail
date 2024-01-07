@@ -101,7 +101,7 @@ chrome.tabs.onActivated.addListener((tab) => {
         activeTab.timer.stop();
         activeTab.isActive = false;
 
-        log.warn("storing Data:", {
+        log.info("storing Data:", {
             domain: page.domain,
             pages: [page]
         })
@@ -162,7 +162,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
                 activeTab.timer.stop();
                 activeTab.isActive = false;
 
-                log.warn("storing Data:", {
+                log.info("storing Data:", {
                     domain: page.domain,
                     pages: [page]
                 })
@@ -238,7 +238,7 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
             activeTab.isActive = false;
 
             // storing data 
-            log.warn("storing Data: when window is unfocused ", {
+            log.info("storing Data: when window is unfocused ", {
                 domain: page.domain,
                 pages: [page]
             })
@@ -333,7 +333,18 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.runtime.onInstalled.addListener(details => {
     log.debug("[L1] onInstalled", details)
     if (details.reason === "install" || details.reason === "update") {
-        initializeAlarms()
+
+        if( details.reason === "update" && details.previousVersion === "2.5.0"){
+            chrome.storage.local.clear();
+            return true;
+        }
+
+        if(details.reason === "install"){
+            authenticateUser((userInfo: any) => {
+                console.log({ isAuthenticated: !!userInfo, user: userInfo })
+            })
+        }
+
     }
 })
 

@@ -1,6 +1,6 @@
 {
   "name": "page-trail",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "description": "This Extension tracks your daily surfing activity",
   "main": "index.js",
   "scripts": {

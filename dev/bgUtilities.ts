@@ -23,15 +23,38 @@ export function getMainDomain(url: string) {
     try {
         const parsedUrl = new URL(url);
         const hostname = parsedUrl.hostname;
+
+        // Check if the hostname is 'localhost' or an IP address
+        if (hostname === 'localhost' || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)) {
+            return hostname;
+        }
+
+        // Split the hostname into parts
         const parts = hostname.split('.').reverse();
-        return parts.length > 2 && (parts[1].length === 2 || ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(parts[1]))
-            ? parts[2] + '.' + parts[1] + '.' + parts[0]
-            : parts[1] + '.' + parts[0];
+
+        // Identify main domain parts (top-level domain and second-level domain)
+        const topLevelDomain = parts[0];
+        let secondLevelDomain = parts[1];
+        let mainDomain = secondLevelDomain + '.' + topLevelDomain;
+
+        // Handle special cases like 'co.uk', 'co.in', etc.
+        if (parts.length > 2 && ['co', 'com', 'net', 'org', 'gov', 'edu'].includes(secondLevelDomain)) {
+            mainDomain = parts[2] + '.' + mainDomain;
+        }
+
+        // Check for subdomains other than 'www'
+        if (parts.length > 2 && hostname !== 'www.' + mainDomain) {
+            return hostname; // return full domain with subdomain
+        }
+
+        // Return main domain (without subdomain)
+        return mainDomain;
     } catch (error) {
         log.error('[error] Invalid URL:', error);
         return '';
     }
 }
+
 
 export function storeData(removedPages: Domain[]) {
 
@@ -115,9 +138,10 @@ export async function sendDataToServer() {
         const unSyncedData = (pageList as Domain[] || []).map((domain: Domain) => {
             return {
                 domain: domain.domain,
-                pages: domain.pages.filter((page: Page) => !page.synced)
+                pages: domain.pages.filter((page: Page) => (typeof page.synced === 'undefined' || !page.synced))
             }
-        }).filter((domain: Domain) => domain.pages.length > 0);
+        })
+            .filter((domain: Domain) => domain.pages.length > 0);
 
         const requestBody = {
             email: user_email,
@@ -127,7 +151,10 @@ export async function sendDataToServer() {
 
         log.debug('Sending data to server:', requestBody);
 
-        const response = await fetch(`https://page-trail-dashboard.vercel.app/api/extension`, {
+        const URL = 'https://page-trail-dashboard.vercel.app/api/extension';
+        // const URL = 'http://localhost:3000/api/extension';
+
+        const response = await fetch(URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
