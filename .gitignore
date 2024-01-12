@@ -5,3 +5,4 @@
 /dist
 /.vscode
 /utils/constants.js
+/test.ts
