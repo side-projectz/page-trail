@@ -125,7 +125,7 @@ export async function sendDataToServer() {
     try {
         const today = new Date();
         const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth()).padStart(2, '0');
+        const mm = String(today.getMonth()).padStart(2, '0') + 1;
         const yyyy = today.getFullYear();
         const date = `${dd}-${mm}-${yyyy}`;
 
@@ -143,10 +143,14 @@ export async function sendDataToServer() {
         })
             .filter((domain: Domain) => domain.pages.length > 0);
 
+        const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        console.log("User's Time Zone:", userTimeZone);
+
         const requestBody = {
             email: user_email,
             data: unSyncedData,
             date,
+            timeZone: userTimeZone,
         }
 
         log.debug('Sending data to server:', requestBody);
