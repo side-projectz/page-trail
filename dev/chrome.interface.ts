@@ -26,6 +26,7 @@ export interface Page {
   meta: {
     title: string;
     description: string;
+    url: string;
     tags?: string[];
   };
   lastVisited: number;
