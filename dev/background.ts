@@ -378,10 +378,7 @@ async function sendData(visits: Page | Page[]) {
 
     log.debug('[sendData] Sending data to server:', requestBody);
 
-    // const URL = 'https://page-trail-dashboard.vercel.app/api/extension';
-
-    const URL = 'http://localhost:3000/api/extension';
-
+    const URL = 'https://page-trail-dashboard.vercel.app/api/extension';
     const response = await fetch(URL, {
       method: 'POST',
       headers: {
@@ -437,9 +434,7 @@ async function syncDataCron() {
 
     log.debug('[syncDataCron] Sending data to server:', requestBody);
 
-    // const URL = 'https://page-trail-dashboard.vercel.app/api/extension';
-    const URL = 'http://localhost:3000/api/extension';
-
+    const URL = 'https://page-trail-dashboard.vercel.app/api/extension';
     const response = await fetch(URL, {
       method: 'POST',
       headers: {
