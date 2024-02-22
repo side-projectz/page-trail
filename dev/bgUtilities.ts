@@ -1,6 +1,6 @@
 import log from 'loglevel';
 
-log.setLevel('warn');
+log.setLevel('error');
 
 const exclusionRules: {
   urlPatterns: string[];

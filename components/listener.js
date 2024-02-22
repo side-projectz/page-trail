@@ -17,12 +17,12 @@ function formatTime(milliseconds) {
   return `${hours}:${minutes}:${seconds}`;
 }
 
-
 function convertArrayToObject(inputArray) {
   const resultObject = {};
 
   inputArray.forEach((item) => {
-    const { domain, page, meta, lastVisited, openedAt, timeSpent, synced } = item;
+    const { domain, page, meta, lastVisited, openedAt, timeSpent, synced } =
+      item;
 
     if (!resultObject[domain]) {
       resultObject[domain] = {
@@ -46,42 +46,39 @@ function convertArrayToObject(inputArray) {
 }
 
 const Listener = () => {
-
   const [sortedDomains, setSortedDomains] = useState([]);
-
 
   const syncData = () => {
     try {
       // console.log("syncData");
       chrome.runtime.sendMessage({ action: 'syncData' }, async (response) => {
-        console.log("syncData success");
+        console.log('syncData success');
       });
     } catch (error) {
-      console.log("syncData error", error);
+      console.log('syncData error', error);
     }
-  }
-
+  };
 
   useEffect(() => {
     const loadData = async () => {
       const result = await chrome.storage.local.get('pageList');
       const pagesVisited = convertArrayToObject(result.pageList);
 
-      console.log("pagesVisited", pagesVisited);
+      console.log('pagesVisited', pagesVisited);
 
-      const displayList = []
-      pagesVisited.forEach(({domain, pages}) => {
+      const displayList = [];
+      pagesVisited.forEach(({ domain, pages }) => {
         const time = pages.reduce((acc, page) => acc + page.timeSpent, 0);
         displayList.push({
           domainName: domain,
           time,
         });
-      })
+      });
 
-      console.log("displayList", displayList);
+      console.log('displayList', displayList);
 
       setSortedDomains(displayList.sort((a, b) => b.time - a.time));
-    }
+    };
 
     loadData();
   }, []);
@@ -103,13 +100,18 @@ const Listener = () => {
       </Head>
 
       <div>
-
         <nav>
           <ul>
-            <li><h1>PageTrail</h1></li>
+            <li>
+              <h1>PageTrail</h1>
+            </li>
           </ul>
           <ul>
-            <li><a href="#" role="button" onClick={syncData}>Sync now</a></li>
+            <li>
+              <a href='#' role='button' onClick={syncData}>
+                Sync now
+              </a>
+            </li>
           </ul>
         </nav>
 
@@ -133,10 +135,9 @@ const Listener = () => {
               </tr>
             </thead>
             <tbody>
-              {(sortedDomains).map(
+              {sortedDomains.map(
                 (domain, index) =>
-                  index < 10 &&
-                  (
+                  index < 10 && (
                     <tr key={index}>
                       <td>{domain.domainName}</td>
                       <td>{formatTime(domain.time * 1000)}</td>

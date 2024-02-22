@@ -1,4 +1,4 @@
-import Timer from "easytimer.js";
+import Timer from 'easytimer.js';
 
 export interface Domain {
   domain: string;
