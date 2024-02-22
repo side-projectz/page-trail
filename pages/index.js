@@ -6,8 +6,12 @@ import Listener from '../components/listener';
 // Move the API call outside of the component
 const fetchUserInfo = async () => {
   const { token } = await chrome.identity.getAuthToken({ interactive: true });
-  const response = await fetch(`https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`);
-  return response.json();
+  const response = await fetch(
+    `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${token}`
+  );
+  const userInfo = await response.json();
+  await chrome.storage.local.set({ user_email: userInfo.email });
+  return userInfo;
 };
 
 export default function Home() {
